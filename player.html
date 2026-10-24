@@ -318,14 +318,24 @@ let timerIds = [];
 let schedulerTimer = null;
 let panicTimer     = null;
 
+/* 已经排进 worklet 队列的最晚时间，防止停止后立刻重播时旧事件漏出 */
+let scheduledUntil = 0;
+
+/* 新一次播放真正开始发声的时间，之前保持静音 */
+let audioGateUntil = 0;
+
 let targetVolume = 0.8;
 
 /*
     SpessaSynth 会把带 time 的事件排进 worklet 内部队列，
-    stopAll() 不会清空这个队列。所以只提前调度 150ms，
+    stopAll() 不会清空这个队列。所以只提前调度一小段，
     剩余事件由这里的小窗口调度器逐段喂给它。
+
+    主线程偶尔卡顿（GC、排版、切后台）时，150ms 的余量
+    很容易被吃光，事件就会挤在同一时刻。这里留 300ms 余量，
+    音频线程仍有足够时间按原定时间发声。
 */
-const SCHEDULE_LOOKAHEAD = 0.15;
+const SCHEDULE_LOOKAHEAD = 0.3;
 
 /* MuseScore General 采样余量很大，需要一级固定增益（约 +26dB） */
 const LOUDNESS_GAIN = 20;
@@ -473,7 +483,7 @@ async function ensureAudio(){
 
     if(!audioCtx){
 
-        audioCtx = new AudioContext({ latencyHint:"interactive" });
+        audioCtx = new AudioContext({ latencyHint:"playback" });
 
         /*
             音量链路：
@@ -772,6 +782,9 @@ function parsePartMeasures(partEl){
     const measures = [];
     const openTies = new Map();
 
+    /* 当前小节在整首曲子里的四分音符起点，用于跨小节连音线 */
+    let measureStartQ = 0;
+
     Array.from(partEl.children)
         .filter(el => el.tagName === "measure")
         .forEach(mEl => {
@@ -779,15 +792,22 @@ function parsePartMeasures(partEl){
             const notes = [];
             const cc    = [];
 
-            const voiceCursor = Object.create(null);
+            /*
+                MusicXML 用 <backup>/<forward> 在文档里移动时间游标，
+                不是让每个声部各自从 0 开始。按文档顺序维护游标，
+                踏板、力度等 direction 的位置才不会跑到小节末尾。
+            */
+            let cursorQ   = 0;
+            let maxEndQ   = 0;
+            let lastNoteQ = 0;
 
             let measureTempo = null;
-            let maxEnd       = 0;
-            let lastCursor   = 0;
 
-            const cursorAt = () =>
-                Object.values(voiceCursor)
-                    .reduce((a, b) => Math.max(a, b), 0);
+            const advance = q => {
+
+                cursorQ = Math.max(0, cursorQ + q);
+                maxEndQ = Math.max(maxEndQ, cursorQ);
+            };
 
             Array.from(mEl.children).forEach(el => {
 
@@ -800,6 +820,28 @@ function parsePartMeasures(partEl){
                     if(d)  divisions = parseInt(d.textContent) || divisions;
                     if(b)  beats     = parseInt(b.textContent) || beats;
                     if(bt) beatType  = parseInt(bt.textContent) || beatType;
+
+                    return;
+                }
+
+                if(el.tagName === "backup"){
+
+                    const d = parseInt(
+                        el.querySelector("duration")?.textContent
+                    ) || 0;
+
+                    cursorQ = Math.max(0, cursorQ - d / divisions);
+
+                    return;
+                }
+
+                if(el.tagName === "forward"){
+
+                    const d = parseInt(
+                        el.querySelector("duration")?.textContent
+                    ) || 0;
+
+                    advance(d / divisions);
 
                     return;
                 }
@@ -844,14 +886,34 @@ function parsePartMeasures(partEl){
 
                     if(pedal){
 
-                        cc.push({
-                            atQ: cursorAt(),
-                            controller: 64,
-                            value:
-                                pedal.getAttribute("type") === "start"
-                                    ? 127
-                                    : 0
-                        });
+                        const type = pedal.getAttribute("type");
+
+                        let value = null;
+
+                        if(type === "start" || type === "change"){
+                            value = 127;
+                        }
+                        else if(type === "stop"){
+                            value = 0;
+                        }
+
+                        if(value !== null){
+
+                            /*
+                                <offset> 的单位是 divisions，
+                                正负都允许。
+                            */
+                            const offset =
+                                parseFloat(
+                                    el.querySelector("offset")?.textContent
+                                ) || 0;
+
+                            cc.push({
+                                atQ: Math.max(0, cursorQ + offset / divisions),
+                                controller: 64,
+                                value
+                            });
+                        }
                     }
 
                     return;
@@ -878,17 +940,17 @@ function parsePartMeasures(partEl){
 
                 const vk = `${staff}_${voice}`;
 
-                if(voiceCursor[vk] == null) voiceCursor[vk] = 0;
+                const q = isChord ? lastNoteQ : cursorQ;
 
-                const q =
-                    isChord
-                        ? voiceCursor[vk] - durQ
-                        : voiceCursor[vk];
+                /*
+                    和弦音与前一音同时开始，不推进游标；
+                    装饰音不占时间，也不推进游标。
+                */
+                if(!isChord && !isGrace){
 
-                if(!isChord) voiceCursor[vk] += durQ;
-
-                maxEnd = Math.max(maxEnd, voiceCursor[vk]);
-                lastCursor = cursorAt();
+                    advance(durQ);
+                    lastNoteQ = q;
+                }
 
                 if(isRest || isGrace || !dur) return;
 
@@ -924,9 +986,13 @@ function parsePartMeasures(partEl){
 
                     const prev = openTies.get(tieKey);
 
+                    /*
+                        用整首曲子的绝对位置计算，不能只用小节内
+                        的 q，否则跨小节的连音线会被小节线截断。
+                    */
                     prev.durQ = Math.max(
                         prev.durQ,
-                        q + durQ - prev.q
+                        measureStartQ + q + durQ - prev.absQ
                     );
 
                     if(ties.includes("start")){
@@ -941,6 +1007,7 @@ function parsePartMeasures(partEl){
 
                 const note = {
                     q,
+                    absQ: measureStartQ + q,
                     durQ,
                     midi,
                     velocity: noteVelocity
@@ -958,15 +1025,19 @@ function parsePartMeasures(partEl){
 
             const nominalQ = beats * (4 / beatType);
 
+            const durationQ =
+                isImplicit && maxEndQ > 0
+                    ? maxEndQ
+                    : nominalQ;
+
             measures.push({
                 notes,
                 cc,
                 tempo: measureTempo,
-                durationQ:
-                    isImplicit && maxEnd > 0
-                        ? maxEnd
-                        : nominalQ
+                durationQ
             });
+
+            measureStartQ += durationQ;
         });
 
     return measures;
@@ -1178,6 +1249,7 @@ function parseMusicXML(xmlText){
     timeline = [];
     measureEvents = [];
 
+    let noteSeq = 0;
     let tSec = 0;
     let bpm  = 120;
 
@@ -1203,8 +1275,11 @@ function parseMusicXML(xmlText){
                 const startSec = tSec + n.q * spq;
                 const durSec   = Math.max(0.03, n.durQ * spq);
 
+                const noteId = noteSeq++;
+
                 timeline.push({
                     type:"on",
+                    noteId,
                     channel: part.info.channel,
                     midi: n.midi,
                     velocity: n.velocity,
@@ -1213,6 +1288,7 @@ function parseMusicXML(xmlText){
 
                 timeline.push({
                     type:"off",
+                    noteId,
                     channel: part.info.channel,
                     midi: n.midi,
                     startSec: startSec + durSec
@@ -1235,18 +1311,79 @@ function parseMusicXML(xmlText){
     });
 
     /*
-        同一时刻先 noteOff 再 noteOn，避免同音高被误关
+        同一时刻先 noteOff 再 noteOn，避免同音高被误关。
+        时间按 10 微秒取整后再比较，防止浮点误差把
+        “先 off 后 on”排成“先 on 后 off”。
     */
-    timeline.sort((a, b) => {
+    const timeKey = e => Math.round(e.startSec * 100000);
 
-        if(a.startSec !== b.startSec){
-            return a.startSec - b.startSec;
-        }
+    const sortTimeline = () => timeline.sort((a, b) => {
+
+        const dt = timeKey(a) - timeKey(b);
+
+        if(dt !== 0) return dt;
 
         const order = { off:0, cc:1, on:2 };
 
         return order[a.type] - order[b.type];
     });
+
+    sortTimeline();
+
+    /*
+        MIDI 同一通道、同一音高不能同时有两个独立发声的音。
+        如果后一个同音高音符在前一个 noteOff 之前开始，
+        把前一个的 noteOff 提前到后一个之前；否则后一个
+        会被前一个的 noteOff 立刻掐掉（听起来像吞音）。
+    */
+    const offById = new Map();
+
+    timeline.forEach(e => {
+        if(e.type === "off") offById.set(e.noteId, e);
+    });
+
+    const lastOnByPitch = new Map();
+    const dropped = new Set();
+
+    timeline.forEach(e => {
+
+        if(e.type !== "on") return;
+
+        const key = `${e.channel}:${e.midi}`;
+        const prev = lastOnByPitch.get(key);
+
+        if(prev){
+
+            const prevOff = offById.get(prev.noteId);
+
+            if(prevOff && prevOff.startSec > e.startSec){
+
+                /* 完全同时的同音重复只保留一个 */
+                if(e.startSec - prev.startSec < 0.001){
+
+                    const selfOff = offById.get(e.noteId);
+
+                    dropped.add(e);
+                    if(selfOff) dropped.add(selfOff);
+
+                    return;
+                }
+
+                prevOff.startSec = Math.max(
+                    prev.startSec + 0.0005,
+                    e.startSec - 0.0005
+                );
+            }
+        }
+
+        lastOnByPitch.set(key, e);
+    });
+
+    if(dropped.size){
+        timeline = timeline.filter(e => !dropped.has(e));
+    }
+
+    sortTimeline();
 
     totalSec = tSec;
     scoreParts = parts.map(p => p.info);
@@ -1393,8 +1530,17 @@ function stopPlayback(){
         const now = audioCtx.currentTime;
 
         /*
+            记录旧队列的到期时间。停止后立刻重播时，
+            startPlayback 会等这批旧事件过期再解除静音。
+        */
+        scheduledUntil = Math.max(
+            scheduledUntil,
+            now + SCHEDULE_LOOKAHEAD
+        );
+
+        /*
             先把输出压到 0 再停音符：
-            worklet 队列里最多还有 150ms 已排好的事件，
+            worklet 队列里最多还有 300ms 已排好的事件，
             静音能保证按下停止后立刻听不到声音，
             稍后再补一次 stopAll 清掉这些音。
         */
@@ -1498,21 +1644,36 @@ async function startPlayback(){
     /* 布局稳定后校准一次小节坐标（滚动条出现会让视口宽度变化） */
     buildMeasurePosMap();
 
-    const ctx = audioCtx;
-
-    // 先清掉上一次可能滞留的音，再解除静音
-    synth.stopAll(true);
-
+    const ctx  = audioCtx;
     const now0 = ctx.currentTime;
+
+    /*
+        如果刚刚停止过，worklet 里还留着上一次排到未来
+        300ms 左右的事件。等它们过期后再解除静音，避免
+        旧音符在新一次播放开头漏出来。
+    */
+    const t0 = Math.max(
+        now0 + SCHEDULE_LOOKAHEAD,
+        scheduledUntil + 0.05
+    );
+
+    audioGateUntil = t0;
 
     if(masterGain){
 
-        masterGain.gain.cancelScheduledValues(now0);
-        masterGain.gain.setValueAtTime(targetVolume, now0);
+        const g = masterGain.gain;
+        const fadeAt = Math.max(now0, t0 - 0.02);
+
+        g.cancelScheduledValues(now0);
+        g.setValueAtTime(0, now0);
+        g.setValueAtTime(0, fadeAt);
+        g.linearRampToValueAtTime(targetVolume, t0);
     }
 
-    const t0    = now0 + SCHEDULE_LOOKAHEAD;
     const speed = 1 / (tempoMultiplier || 1);
+
+    // 清掉上一次可能还在发声的音（队列里的旧事件已靠静音隔离）
+    synth.stopAll(true);
 
     const programs = currentPrograms();
 
@@ -1525,7 +1686,7 @@ async function startPlayback(){
     });
 
     /*
-        只把接下来 150ms 的事件交给 worklet，
+        只把接下来 300ms 的事件交给 worklet，
         避免整首曲子的 noteOn 提前排在队列里无法撤销。
     */
 
@@ -1545,7 +1706,11 @@ async function startPlayback(){
 
             if(at > horizon) break;
 
-            sendTimelineEvent(ev, Math.max(at, now));
+            const when = Math.max(at, now);
+
+            sendTimelineEvent(ev, when);
+
+            scheduledUntil = Math.max(scheduledUntil, when);
 
             eventIndex++;
         }
@@ -1558,7 +1723,7 @@ async function startPlayback(){
     };
 
     feed();
-    schedulerTimer = setInterval(feed, 40);
+    schedulerTimer = setInterval(feed, 25);
 
     setStatus(
         `🎶 播放中… ${scoreParts.length} 声部 · ` +
@@ -1566,6 +1731,8 @@ async function startPlayback(){
     );
 
     /* -------- 光标 -------- */
+
+    const leadMs = Math.max(0, (t0 - ctx.currentTime) * 1000);
 
     measureEvents.forEach(ev => {
 
@@ -1577,7 +1744,7 @@ async function startPlayback(){
                 highlightMeasure(ev.measureIndex);
             }
 
-        }, Math.max(0, ms));
+        }, leadMs + Math.max(0, ms));
 
         timerIds.push(tid);
     });
@@ -1592,7 +1759,7 @@ async function startPlayback(){
             setStatus("✅ 播放完毕");
         }
 
-    }, totalSec * speed * 1000 + 1500);
+    }, leadMs + totalSec * speed * 1000 + 1500);
 
     timerIds.push(endId);
 }
@@ -1693,8 +1860,25 @@ volumeSlider.addEventListener("input", () => {
 
         const now = audioCtx.currentTime;
 
-        masterGain.gain.cancelScheduledValues(now);
-        masterGain.gain.setValueAtTime(targetVolume, now);
+        /* 新一次播放还没真正开始：保持静音，音量在 t0 生效 */
+        if(now >= audioGateUntil){
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(targetVolume, now);
+        }
+        else{
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(0, now);
+            masterGain.gain.setValueAtTime(
+                0,
+                Math.max(now, audioGateUntil - 0.02)
+            );
+            masterGain.gain.linearRampToValueAtTime(
+                targetVolume,
+                audioGateUntil
+            );
+        }
     }
 });
 
