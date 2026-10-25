@@ -782,12 +782,18 @@ function parsePartMeasures(partEl){
     const measures = [];
     const openTies = new Map();
 
+    /*
+        装饰音不占谱面时间，先按声部挂起，
+        等下一个真正发声的音符确定起点后再统一排进去。
+    */
+    const pendingGraces = new Map();
+
     /* 当前小节在整首曲子里的四分音符起点，用于跨小节连音线 */
     let measureStartQ = 0;
 
     Array.from(partEl.children)
         .filter(el => el.tagName === "measure")
-        .forEach(mEl => {
+        .forEach((mEl, measureIndex) => {
 
             const notes = [];
             const cc    = [];
@@ -952,7 +958,7 @@ function parsePartMeasures(partEl){
                     lastNoteQ = q;
                 }
 
-                if(isRest || isGrace || !dur) return;
+                if(isRest) return;
 
                 const pitch = el.querySelector("pitch");
                 if(!pitch) return;
@@ -971,6 +977,57 @@ function parsePartMeasures(partEl){
                         ),
                         1, 127
                     );
+                }
+
+                /*
+                    装饰音没有 duration，也不推进游标，
+                    先挂起，等主音符确定起点后再排到它前面。
+                */
+                if(isGrace){
+
+                    if(!pendingGraces.has(vk)){
+                        pendingGraces.set(vk, []);
+                    }
+
+                    pendingGraces.get(vk).push({
+                        midi,
+                        velocity: noteVelocity
+                    });
+
+                    return;
+                }
+
+                const graces = pendingGraces.get(vk);
+
+                if(graces?.length && durQ > 0){
+
+                    pendingGraces.delete(vk);
+
+                    /*
+                        装饰音从主音符的拍点向前挤出时间，
+                        主音符本身仍落在原来的拍点上，后续节奏不变。
+                        整组最多 0.35 个四分音符，且不超过主音符的 60%，
+                        保证每个装饰音都有足够长度、听得出音高。
+                    */
+                    const totalGraceQ =
+                        Math.min(0.35, durQ * 0.6);
+
+                    const stepQ =
+                        totalGraceQ / graces.length;
+
+                    graces.forEach((g, gi) => {
+
+                        const gq =
+                            q - totalGraceQ + gi * stepQ;
+
+                        notes.push({
+                            q: gq,
+                            absQ: measureStartQ + gq,
+                            durQ: Math.max(0.02, stepQ * 0.9),
+                            midi: g.midi,
+                            velocity: g.velocity
+                        });
+                    });
                 }
 
                 const ties =
@@ -1025,10 +1082,22 @@ function parsePartMeasures(partEl){
 
             const nominalQ = beats * (4 / beatType);
 
+            /*
+                弱起小节（anacrusis）的实际时值比名义时值短。
+                MuseScore 导出的弱起小节经常不带 implicit="yes"，
+                所以第一小节内容不足整小节时也按实际内容计时，
+                否则弱起音之后会多出一段整小节的空白。
+            */
             const durationQ =
                 isImplicit && maxEndQ > 0
                     ? maxEndQ
-                    : nominalQ;
+                    : (
+                        measureIndex === 0 &&
+                        maxEndQ > 0 &&
+                        maxEndQ < nominalQ
+                    )
+                        ? maxEndQ
+                        : nominalQ;
 
             measures.push({
                 notes,
@@ -1317,6 +1386,33 @@ function parseMusicXML(xmlText){
     */
     const timeKey = e => Math.round(e.startSec * 100000);
 
+    /*
+        小节线处经常同时出现“上一个音 noteOff”和“新小节踩下延音踏板”。
+        如果踏板先于 noteOff 生效，上一个音会被踏板一直拖到新小节末
+        （听感上就像那个音长了整整一小节）。这里把与 noteOff 同一时刻
+        的踏板踩下事件推迟 1ms，确保先松开旧音再踩踏板。
+    */
+    const offTimes = new Set();
+
+    timeline.forEach(e => {
+
+        if(e.type === "off"){
+            offTimes.add(`${e.channel}:${timeKey(e)}`);
+        }
+    });
+
+    timeline.forEach(e => {
+
+        if(
+            e.type === "cc" &&
+            e.controller === 64 &&
+            e.value >= 64 &&
+            offTimes.has(`${e.channel}:${timeKey(e)}`)
+        ){
+            e.startSec += 0.001;
+        }
+    });
+
     const sortTimeline = () => timeline.sort((a, b) => {
 
         const dt = timeKey(a) - timeKey(b);
@@ -1324,6 +1420,13 @@ function parseMusicXML(xmlText){
         if(dt !== 0) return dt;
 
         const order = { off:0, cc:1, on:2 };
+
+        /* 同一时刻先松开踏板，再踩下新踏板 */
+        if(a.type === "cc" && b.type === "cc"){
+            if(a.controller === 64 && b.controller === 64){
+                return a.value - b.value;
+            }
+        }
 
         return order[a.type] - order[b.type];
     });
