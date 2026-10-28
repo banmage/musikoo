@@ -1,0 +1,2652 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" href="data:,">
+
+<title>MusicXML 歌眼抽取器（SF2 真实音色版）</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:24px;
+    background:#eef3f8;
+    font-family:system-ui,-apple-system,sans-serif;
+}
+
+.app{
+    max-width:1820px;
+    margin:auto;
+    display:flex;
+    flex-direction:column;
+    height:calc(100vh - 48px);
+    min-height:560px;
+    background:#fff;
+    border-radius:28px;
+    overflow:hidden;
+    box-shadow:0 18px 40px rgba(0,0,0,.18);
+}
+
+.toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:12px;
+    padding:18px 24px;
+    border-bottom:1px solid #e9edf2;
+    background:#fbfdff;
+}
+
+.file-btn{
+    background:#182433;
+    color:#fff;
+    border-radius:999px;
+    padding:10px 18px;
+    font-weight:600;
+    cursor:pointer;
+    user-select:none;
+}
+
+.file-btn input{
+    display:none;
+}
+
+button{
+    border:none;
+    border-radius:999px;
+    padding:10px 22px;
+    font-weight:600;
+    cursor:pointer;
+}
+
+button:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+}
+
+#playBtn{
+    background:#1d7b3e;
+    color:#fff;
+}
+
+#stopBtn{
+    background:#b43d2f;
+    color:#fff;
+}
+
+.status{
+    margin-left:auto;
+    background:#edf3ff;
+    color:#24436c;
+    padding:8px 16px;
+    border-radius:999px;
+    font-size:.88rem;
+    max-width:52ch;
+}
+
+.tempo,
+.volume,
+.instrument{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:.9rem;
+    color:#3a4a5e;
+}
+
+.tempo input,
+.volume input{
+    width:110px;
+}
+
+.instrument select{
+    border:1px solid #d6dee8;
+    border-radius:999px;
+    padding:7px 12px;
+    background:#fff;
+    color:#182433;
+    font:inherit;
+    font-size:.85rem;
+    max-width:210px;
+}
+
+#scoreWrapper{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    background:#fffdf8;
+    padding:24px;
+}
+
+#scoreContainer{
+    position:relative;
+}
+
+/* 当前播放小节的浅粉色高亮 */
+#measureHighlight{
+    position:absolute;
+    display:none;
+    z-index:5;
+    pointer-events:none;
+    border-radius:6px;
+    background:rgba(255,150,185,.26);
+    box-shadow:
+        inset 0 0 0 1.5px rgba(240,110,155,.35),
+        0 0 10px rgba(255,150,185,.35);
+}
+
+/* =========================================================
+   右侧歌眼面板
+========================================================= */
+
+.main-area{
+    display:flex;
+    flex:1 1 auto;
+    min-height:0;
+    min-width:0;
+}
+
+#sidePanel{
+    display:flex;
+    flex-direction:column;
+    flex:0 0 390px;
+    width:390px;
+    min-width:330px;
+    border-left:1px solid #e9edf2;
+    background:#fbfdff;
+    overflow:auto;
+}
+
+.side-head{
+    padding:20px 20px 12px;
+    border-bottom:1px solid #edf2f5;
+}
+
+.side-head h2{
+    margin:0 0 6px;
+    font-size:1.02rem;
+    color:#1c2d40;
+    letter-spacing:.02em;
+}
+
+.side-head p{
+    margin:0;
+    color:#7b8797;
+    font-size:.76rem;
+    line-height:1.6;
+}
+
+.snippet-form{
+    padding:14px 20px;
+    border-bottom:1px solid #edf2f5;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.snippet-form label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:.8rem;
+    color:#425166;
+}
+
+.snippet-form label > span{
+    flex:0 0 42px;
+}
+
+.snippet-form select,
+.snippet-form input{
+    flex:1 1 auto;
+    min-width:0;
+    border:1px solid #d6dee8;
+    border-radius:9px;
+    padding:7px 9px;
+    background:#fff;
+    color:#1c2d40;
+    font:inherit;
+    font-size:.8rem;
+}
+
+.range-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.range-row .range-item{
+    flex:1 1 0;
+    min-width:0;
+}
+
+.range-row .range-item span{
+    flex:0 0 auto;
+}
+
+.range-sep{
+    color:#93a0b1;
+    font-size:.8rem;
+}
+
+.snippet-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+}
+
+.snippet-actions button{
+    padding:8px 13px;
+    font-size:.8rem;
+    background:#e9eff6;
+    color:#27384c;
+}
+
+#autoMelodyBtn{
+    flex:1 0 100%;
+    background:linear-gradient(135deg,#2f5f9e,#3c86c9);
+    color:#fff;
+    box-shadow:0 4px 12px rgba(47,95,158,.22);
+}
+
+.melody-row{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:7px 9px;
+    border:1px dashed #d7e2ee;
+    border-radius:9px;
+    background:#f8fbfe;
+    color:#51647a;
+    font-size:.76rem;
+}
+
+.melody-row > span{
+    flex:1 1 auto;
+}
+
+.melody-row input{
+    flex:0 0 auto;
+    width:15px;
+    height:15px;
+    accent-color:#2f5f9e;
+}
+
+#copySnippetBtn{
+    flex:1 1 auto;
+    background:#2f5f9e;
+    color:#fff;
+}
+
+#snippetSaveBtn{
+    background:#17654a;
+    color:#fff;
+}
+
+#snippetUndoBtn{
+    background:#f1f4f7;
+}
+
+.snippet-hint{
+    color:#7b8797;
+    font-size:.75rem;
+    line-height:1.55;
+    min-height:1.2em;
+}
+
+.snippet-hint.error{
+    color:#b33a2b;
+}
+
+.snippet-preview{
+    flex:1 1 auto;
+    min-height:220px;
+    padding:14px 16px;
+    display:flex;
+    flex-direction:column;
+}
+
+#snippetScoreContainer{
+    position:relative;
+    min-height:180px;
+    border:1px dashed #dfe7ef;
+    border-radius:12px;
+    background:#fffdf8;
+    padding:10px 0;
+    overflow:auto;
+}
+
+#snippetScoreContainer svg{
+    display:block;
+    max-width:100%;
+    height:auto;
+}
+
+.snippet-empty{
+    padding:48px 18px;
+    text-align:center;
+    color:#a3adba;
+    font-size:.8rem;
+    line-height:1.8;
+}
+
+.snippet-foot{
+    padding:12px 20px 18px;
+    color:#8b96a5;
+    font-size:.72rem;
+    line-height:1.6;
+    border-top:1px solid #edf2f5;
+}
+
+/* 音符拖动覆盖层 */
+.note-edit-layer{
+    position:absolute;
+    inset:0;
+    z-index:8;
+    pointer-events:none;
+}
+
+.note-handle{
+    position:absolute;
+    width:16px;
+    height:16px;
+    margin:-8px 0 0 -8px;
+    border-radius:50%;
+    border:1.5px solid rgba(233,126,29,.0);
+    background:rgba(233,126,29,0);
+    pointer-events:auto;
+    cursor:ew-resize;
+    touch-action:none;
+    transition:background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+
+.note-handle::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:5px;
+    height:5px;
+    margin:-2.5px 0 0 -2.5px;
+    border-radius:50%;
+    background:rgba(205,102,15,.45);
+    transition:opacity .12s ease;
+}
+
+.note-handle:hover,
+.note-handle.active{
+    background:rgba(255,176,84,.35);
+    border-color:rgba(205,102,15,.85);
+    box-shadow:0 0 0 3px rgba(255,176,84,.2);
+}
+
+.note-handle:hover::after,
+.note-handle.active::after{
+    opacity:0;
+}
+
+.note-handle.dragging{
+    background:rgba(255,154,44,.55);
+    border-color:#b8620b;
+    box-shadow:0 0 0 4px rgba(255,154,44,.22);
+}
+
+.drag-ghost{
+    position:absolute;
+    height:5px;
+    border-radius:4px;
+    background:linear-gradient(90deg,rgba(219,124,24,.25),rgba(219,124,24,.75));
+    box-shadow:0 0 8px rgba(219,124,24,.35);
+    pointer-events:none;
+    z-index:9;
+}
+
+.drag-label{
+    position:absolute;
+    transform:translate(-50%,-100%);
+    background:#25384f;
+    color:#fff;
+    border-radius:8px;
+    padding:5px 9px;
+    font-size:.72rem;
+    white-space:nowrap;
+    box-shadow:0 4px 12px rgba(0,0,0,.22);
+    pointer-events:none;
+    z-index:10;
+}
+
+.drag-label small{
+    opacity:.72;
+    margin-left:5px;
+}
+
+@media (max-width:1100px){
+
+    .app{
+        height:auto;
+        min-height:100vh;
+    }
+
+    .main-area{
+        flex-direction:column;
+    }
+
+    #scoreWrapper{
+        min-height:60vh;
+    }
+
+    #sidePanel{
+        flex:0 0 auto;
+        width:100%;
+        min-width:0;
+        border-left:none;
+        border-top:1px solid #e9edf2;
+    }
+
+    #snippetScoreContainer{
+        max-height:55vh;
+    }
+}
+
+
+footer{
+    text-align:center;
+    padding:12px;
+    color:#7d8796;
+    font-size:.78rem;
+    border-top:1px solid #edf2f5;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="toolbar">
+
+        <nav class="feature-nav" id="featureNav" aria-label="功能导航"></nav>
+
+        <label class="file-btn">
+            📂 加载 MusicXML
+            <input
+                type="file"
+                id="fileInput"
+                accept=".xml,.musicxml,.mxl"
+            >
+        </label>
+
+        <button id="playBtn" disabled>
+            ▶ 播放
+        </button>
+
+        <button id="stopBtn" disabled>
+            ⏹ 停止
+        </button>
+
+        <div class="tempo">
+            <span>速度</span>
+
+            <input
+                type="range"
+                id="tempoSlider"
+                min="25"
+                max="200"
+                value="100"
+            >
+
+            <span id="tempoText">100%</span>
+        </div>
+
+        <div class="volume">
+            <span>音量</span>
+
+            <input
+                type="range"
+                id="volumeSlider"
+                min="0"
+                max="100"
+                value="80"
+            >
+        </div>
+
+        <div class="instrument">
+            <span>乐器</span>
+
+            <select id="instrumentSelect" title="覆盖乐谱自带的乐器设置">
+                <option value="auto">跟随乐谱</option>
+            </select>
+        </div>
+
+        <div class="status" id="status">
+            🎼 等待加载乐谱
+        </div>
+
+    </div>
+
+    <div class="main-area">
+
+        <div id="scoreWrapper">
+
+            <div id="measureHighlight"></div>
+
+            <div id="scoreContainer">
+                <div style="padding:80px;text-align:center;color:#aaa;">
+                    请加载 MusicXML 文件
+                </div>
+            </div>
+
+        </div>
+
+        <aside id="sidePanel">
+
+            <div class="side-head">
+                <h2>歌眼 / 声部片段</h2>
+                <p>
+                    选择声部、谱表与小节范围，把旋律复制到右侧。
+                    右侧谱面同样可以拖动音符修改时值，并单独保存。
+                </p>
+            </div>
+
+            <div class="snippet-form">
+
+                <label>
+                    <span>声部</span>
+                    <select id="snippetPartSelect" disabled></select>
+                </label>
+
+                <label>
+                    <span>谱表</span>
+                    <select id="snippetStaffSelect" disabled></select>
+                </label>
+
+                <label>
+                    <span>声部线</span>
+                    <select id="snippetVoiceSelect" disabled></select>
+                </label>
+
+                <label>
+                    <span>网格</span>
+                    <select id="gridSelect" title="拖动音符时的时值吸附网格">
+                        <option value="1">1 拍</option>
+                        <option value="0.5" selected>1/2 拍</option>
+                        <option value="0.25">1/4 拍</option>
+                        <option value="0.125">1/8 拍</option>
+                    </select>
+                </label>
+
+                <div class="range-row">
+                    <label class="range-item">
+                        <span>小节</span>
+                        <input type="number" id="snippetFrom" min="1" value="1" disabled>
+                    </label>
+
+                    <span class="range-sep">–</span>
+
+                    <label class="range-item">
+                        <span>至</span>
+                        <input type="number" id="snippetTo" min="1" value="8" disabled>
+                    </label>
+                </div>
+
+                <label class="melody-row" title="自动抽取时只保留同一时刻的最高音，得到单声部旋律">
+                    <input type="checkbox" id="melodyTopOnly" checked>
+                    <span>只保留最高音（单旋律）</span>
+                </label>
+
+                <div class="snippet-actions">
+                    <button id="autoMelodyBtn" disabled title="自动分析各声部，选出最像主旋律的一条并复制到右侧">🎵 自动抽取主旋律</button>
+                    <button id="copySnippetBtn" disabled>复制到右侧</button>
+                    <button id="snippetUndoBtn" disabled title="撤销片段中的时值修改">↶ 撤销</button>
+                    <button id="snippetSaveBtn" disabled title="下载右侧片段 MusicXML">💾 保存片段</button>
+                </div>
+
+                <div class="snippet-hint" id="snippetStatus">
+                    加载曲谱后，选择要提取的旋律声部。
+                </div>
+
+            </div>
+
+            <div class="snippet-preview">
+                <div id="snippetScoreContainer">
+                    <div class="snippet-empty">
+                        尚未复制片段。<br>
+                        选择声部和小节范围后点击“复制到右侧”。
+                    </div>
+                </div>
+            </div>
+
+            <div class="snippet-foot">
+                拖动音符左右移动 = 修改时值（按右侧“网格”吸附）。<br>
+                片段保存为独立 MusicXML，后续可用于简谱转换。
+            </div>
+
+        </aside>
+
+    </div>
+
+    <footer>
+        OSMD + SpessaSynth（MuseScore General SF3）MusicXML 歌眼抽取器 ·
+        <a href="./play.html">功能首页</a> ·
+        <a href="./player.html">播放器</a> ·
+        <a href="./edit.html">谱面编辑</a> ·
+        <a href="./new.html">新建曲谱</a>
+    </footer>
+
+</div>
+
+<script>
+/*
+    file:// 下 ES Module / AudioWorklet / fetch 都会被浏览器拦截，
+    所以这里先在普通脚本里给出提示。
+*/
+if (location.protocol === "file:") {
+
+    document.getElementById("status").innerHTML =
+        "⚠️ 请用本地服务器打开（见下方说明）";
+
+    document.getElementById("status").style.color = "#c0392b";
+
+    document.getElementById("scoreContainer").innerHTML =
+        '<div style="padding:60px;text-align:center;color:#666;line-height:1.9">' +
+        "这个播放器需要从本地服务器加载音色库。<br>" +
+        "在项目目录运行 <code>./start.sh</code>（或 <code>python3 -m http.server 8000</code>），<br>" +
+        "然后访问 <code>http://localhost:8000/extract.html</code>。" +
+        "</div>";
+}
+</script>
+
+<script src="./vendor/opensheetmusicdisplay.min.js"></script>
+
+<script type="importmap">
+{
+    "imports": {
+        "spessasynth_core": "./vendor/spessasynth_core.js",
+        "stb-vorbis": "./vendor/stb-vorbis.js"
+    }
+}
+</script>
+
+<script type="module">
+
+import { WorkletSynthesizer } from "./vendor/spessasynth_lib.js";
+import {
+    analyzeMelodyVoices,
+    applyDurationToXmlNote,
+    buildMeasurePosMapFrom,
+    buildVoiceSnippetXml,
+    baseFileName,
+    childText,
+    chordGroupFor,
+    clamp,
+    collectXmlNotes,
+    directChild,
+    directChildren,
+    downloadXml,
+    durationLabel,
+    findGraphicXmlEntry,
+    formatQ,
+    graphicPartIndex,
+    hasDirectChild,
+    initFeatureNav,
+    measureBoxInContainer,
+    measurePxPerQ,
+    melodyRangeFor,
+    osmdPointToContainer,
+    parseMusicXML,
+    pitchToMidi,
+    serializeMusicXml,
+    setChildText,
+    snapNotatedDuration,
+    sourceStructure
+} from "./js/musikoo-core.js?v=20261028b";
+
+/* =========================================================
+   DOM
+========================================================= */
+
+const fileInput        = document.getElementById("fileInput");
+const playBtn          = document.getElementById("playBtn");
+const stopBtn          = document.getElementById("stopBtn");
+const statusEl         = document.getElementById("status");
+const tempoSlider      = document.getElementById("tempoSlider");
+const tempoText        = document.getElementById("tempoText");
+const volumeSlider     = document.getElementById("volumeSlider");
+const instrumentSelect = document.getElementById("instrumentSelect");
+const scoreWrapper     = document.getElementById("scoreWrapper");
+const scoreContainer   = document.getElementById("scoreContainer");
+const measureHighlight = document.getElementById("measureHighlight");
+
+const gridSelect       = document.getElementById("gridSelect");
+
+const snippetPartSelect  = document.getElementById("snippetPartSelect");
+const snippetStaffSelect = document.getElementById("snippetStaffSelect");
+const snippetVoiceSelect = document.getElementById("snippetVoiceSelect");
+const snippetFrom        = document.getElementById("snippetFrom");
+const snippetTo          = document.getElementById("snippetTo");
+const copySnippetBtn     = document.getElementById("copySnippetBtn");
+const snippetUndoBtn     = document.getElementById("snippetUndoBtn");
+const snippetSaveBtn     = document.getElementById("snippetSaveBtn");
+const autoMelodyBtn      = document.getElementById("autoMelodyBtn");
+const melodyTopOnly      = document.getElementById("melodyTopOnly");
+const snippetStatus      = document.getElementById("snippetStatus");
+const snippetContainer   = document.getElementById("snippetScoreContainer");
+
+/* =========================================================
+   状态
+========================================================= */
+
+const SOUNDFONT_URL = "./soundfonts/MuseScore_General.sf3";
+const SOUNDFONT_ID  = "musescore-general";
+
+let osmd = null;
+
+let audioCtx   = null;
+let synth      = null;
+let masterGain = null;
+let loudnessGain = null;
+let limiter    = null;
+
+let soundfontPromise = null;
+let soundfontReady   = false;
+
+let timeline     = [];
+let measureEvents = [];
+let scoreParts   = [];
+let totalSec     = 0;
+let parsedFileName = "";
+
+/* -------- 编辑状态 -------- */
+
+let sourceDoc      = null;   // 当前完整曲谱的 XML DOM（编辑以它为准）
+let originalXml    = "";     // 加载时的原始 XML，用于“还原”
+let loadedFileName = "";
+let dragGridQ      = 0.5;
+
+let snippetDoc       = null;
+let snippetXml       = "";
+let snippetOriginalXml = "";
+let snippetOsmd      = null;
+let snippetNoteModel = null;
+let snippetUndoStack = [];
+let snippetMeta      = null;
+let snippetMeasurePosMap = [];
+let sourcePartInfo   = [];
+let sourceMeasureCount = 0;
+
+let playbackId = 0;
+let isPlaying  = false;
+
+let timerIds = [];
+
+let schedulerTimer = null;
+let panicTimer     = null;
+
+/* 已经排进 worklet 队列的最晚时间，防止停止后立刻重播时旧事件漏出 */
+let scheduledUntil = 0;
+
+/* 新一次播放真正开始发声的时间，之前保持静音 */
+let audioGateUntil = 0;
+
+let targetVolume = 0.8;
+
+/*
+    SpessaSynth 会把带 time 的事件排进 worklet 内部队列，
+    stopAll() 不会清空这个队列。所以只提前调度一小段，
+    剩余事件由这里的小窗口调度器逐段喂给它。
+
+    主线程偶尔卡顿（GC、排版、切后台）时，150ms 的余量
+    很容易被吃光，事件就会挤在同一时刻。这里留 300ms 余量，
+    音频线程仍有足够时间按原定时间发声。
+*/
+const SCHEDULE_LOOKAHEAD = 0.3;
+
+/* MuseScore General 采样余量很大，需要一级固定增益（约 +26dB） */
+const LOUDNESS_GAIN = 20;
+
+let tempoMultiplier = 1.0;
+
+/* =========================================================
+   工具
+========================================================= */
+
+function setStatus(text, isError=false){
+
+    statusEl.innerHTML = text;
+    statusEl.style.color =
+        isError ? "#c0392b" : "#24436c";
+}
+
+function hideHighlight(){
+
+    if(!measureHighlight) return;
+
+    measureHighlight.style.display = "none";
+}
+
+/*
+    把 SVG 用户坐标换算成 #scoreWrapper 内容区坐标。
+    每次高亮时现算，窗口缩放后也不会错位。
+*/
+function measureScreenBox(pos){
+
+    const svg = scoreContainer.querySelector("svg");
+
+    if(!svg) return null;
+
+    const ctm = svg.getScreenCTM();
+    const wr  = scoreWrapper.getBoundingClientRect();
+
+    const scaleX = Math.hypot(ctm.a, ctm.b);
+    const scaleY = Math.hypot(ctm.c, ctm.d);
+
+    return {
+        left:
+            ctm.a * pos.x + ctm.c * pos.y + ctm.e
+            - wr.left + scoreWrapper.scrollLeft,
+
+        top:
+            ctm.b * pos.x + ctm.d * pos.y + ctm.f
+            - wr.top + scoreWrapper.scrollTop,
+
+        width:  pos.w * scaleX,
+        height: pos.h * scaleY
+    };
+}
+
+/*
+    高亮当前播放的小节（浅粉色背景）
+*/
+function highlightMeasure(measureIndex){
+
+    const pos = measurePosMap[measureIndex];
+
+    if(!pos || !measureHighlight) return;
+
+    const box = measureScreenBox(pos);
+
+    if(!box) return;
+
+    lastHighlightedMeasure = measureIndex;
+
+    measureHighlight.style.display = "block";
+
+    measureHighlight.style.left   = (box.left - 3) + "px";
+    measureHighlight.style.top    = (box.top - 5) + "px";
+    measureHighlight.style.width  = (box.width + 6) + "px";
+    measureHighlight.style.height = (box.height + 10) + "px";
+
+    keepMeasureInView();
+}
+
+/*
+    当前小节超出可视区域时自动滚动：
+    竖直方向把当前小节顶到第一行，水平方向做最小移动。
+*/
+function keepMeasureInView(){
+
+    if(!measureHighlight) return;
+
+    const hr = measureHighlight.getBoundingClientRect();
+    const wr = scoreWrapper.getBoundingClientRect();
+
+    const pad = 28;
+
+    const visTop    = wr.top + pad;
+    const visBottom = wr.bottom - pad;
+    const visLeft   = wr.left + pad;
+    const visRight  = wr.right - pad;
+
+    let top  = scoreWrapper.scrollTop;
+    let left = scoreWrapper.scrollLeft;
+
+    if(hr.bottom > visBottom || hr.top < visTop){
+
+        top = Math.max(
+            0,
+            scoreWrapper.scrollTop + (hr.top - visTop)
+        );
+    }
+
+    if(hr.left < visLeft){
+
+        left = Math.max(
+            0,
+            scoreWrapper.scrollLeft + (hr.left - visLeft)
+        );
+    }
+    else if(hr.right > visRight){
+
+        left =
+            scoreWrapper.scrollLeft
+            + (hr.right - visRight);
+    }
+
+    if(
+        Math.abs(top - scoreWrapper.scrollTop) > 1 ||
+        Math.abs(left - scoreWrapper.scrollLeft) > 1
+    ){
+
+        scoreWrapper.scrollTo({
+            top,
+            left,
+            behavior:"smooth"
+        });
+    }
+}
+
+/* =========================================================
+   音色库 / 合成器
+========================================================= */
+
+async function ensureAudio(){
+
+    if(!audioCtx){
+
+        audioCtx = new AudioContext({ latencyHint:"playback" });
+
+        /*
+            音量链路：
+            synth → 固定增益 → 限幅器 → 用户音量 → 扬声器
+        */
+
+        loudnessGain = audioCtx.createGain();
+        loudnessGain.gain.value = LOUDNESS_GAIN;
+
+        limiter = audioCtx.createDynamicsCompressor();
+        limiter.threshold.value = -6;
+        limiter.knee.value      = 2;
+        limiter.ratio.value     = 12;
+        limiter.attack.value    = 0.004;
+        limiter.release.value   = 0.25;
+
+        masterGain = audioCtx.createGain();
+        targetVolume = volumeSlider.value / 100;
+        masterGain.gain.value = targetVolume;
+
+        loudnessGain.connect(limiter);
+        limiter.connect(masterGain);
+        masterGain.connect(audioCtx.destination);
+
+        // 合成器跑在 AudioWorklet 里，processor 必须和页面同源
+        await audioCtx.audioWorklet.addModule(
+            "./vendor/spessasynth_processor.min.js"
+        );
+
+        // 默认 17 个输出（主输出 + 16 通道），只把主输出接到扬声器
+        synth = new WorkletSynthesizer(audioCtx);
+
+        synth.connect(loudnessGain);
+    }
+
+    if(audioCtx.state !== "running"){
+        await audioCtx.resume();
+    }
+
+    return audioCtx;
+}
+
+async function ensureSoundfont(){
+
+    await ensureAudio();
+
+    if(soundfontReady) return;
+
+    if(!soundfontPromise){
+
+        soundfontPromise = (async () => {
+
+            setStatus("🎹 正在加载音色库（约 40MB，仅第一次）… 0%");
+
+            const res = await fetch(SOUNDFONT_URL);
+
+            if(!res.ok){
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const total =
+                Number(res.headers.get("content-length")) || 0;
+
+            const reader = res.body?.getReader?.();
+
+            let buffer;
+
+            if(reader){
+
+                const chunks = [];
+                let received = 0;
+                let lastPct  = -1;
+
+                while(true){
+
+                    const { done, value } =
+                        await reader.read();
+
+                    if(done) break;
+
+                    chunks.push(value);
+                    received += value.length;
+
+                    if(total){
+
+                        const pct =
+                            Math.min(100, Math.floor(received / total * 100));
+
+                        if(pct !== lastPct){
+
+                            lastPct = pct;
+
+                            setStatus(
+                                `🎹 正在加载音色库… ${pct}%`
+                            );
+                        }
+                    }
+                }
+
+                buffer = await new Blob(chunks).arrayBuffer();
+
+            }else{
+
+                buffer = await res.arrayBuffer();
+            }
+
+            await synth.soundBankManager.addSoundBank(
+                buffer,
+                SOUNDFONT_ID
+            );
+
+            soundfontReady = true;
+
+        })();
+    }
+
+    try{
+
+        await soundfontPromise;
+
+    }catch(e){
+
+        soundfontPromise = null;
+        throw e;
+    }
+}
+
+/* =========================================================
+   General MIDI 乐器名
+========================================================= */
+
+const GM_NAMES = [
+    "Acoustic Grand Piano","Bright Acoustic Piano","Electric Grand Piano","Honky-tonk Piano",
+    "Electric Piano 1","Electric Piano 2","Harpsichord","Clavinet",
+    "Celesta","Glockenspiel","Music Box","Vibraphone",
+    "Marimba","Xylophone","Tubular Bells","Dulcimer",
+    "Drawbar Organ","Percussive Organ","Rock Organ","Church Organ",
+    "Reed Organ","Accordion","Harmonica","Tango Accordion",
+    "Acoustic Guitar (nylon)","Acoustic Guitar (steel)","Electric Guitar (jazz)","Electric Guitar (clean)",
+    "Electric Guitar (muted)","Overdriven Guitar","Distortion Guitar","Guitar Harmonics",
+    "Acoustic Bass","Electric Bass (finger)","Electric Bass (pick)","Fretless Bass",
+    "Slap Bass 1","Slap Bass 2","Synth Bass 1","Synth Bass 2",
+    "Violin","Viola","Cello","Contrabass",
+    "Tremolo Strings","Pizzicato Strings","Orchestral Harp","Timpani",
+    "String Ensemble 1","String Ensemble 2","Synth Strings 1","Synth Strings 2",
+    "Choir Aahs","Voice Oohs","Synth Voice","Orchestra Hit",
+    "Trumpet","Trombone","Tuba","Muted Trumpet",
+    "French Horn","Brass Section","Synth Brass 1","Synth Brass 2",
+    "Soprano Sax","Alto Sax","Tenor Sax","Baritone Sax",
+    "Oboe","English Horn","Bassoon","Clarinet",
+    "Piccolo","Flute","Recorder","Pan Flute",
+    "Blown Bottle","Shakuhachi","Whistle","Ocarina",
+    "Lead 1 (square)","Lead 2 (sawtooth)","Lead 3 (calliope)","Lead 4 (chiff)",
+    "Lead 5 (charang)","Lead 6 (voice)","Lead 7 (fifths)","Lead 8 (bass + lead)",
+    "Pad 1 (new age)","Pad 2 (warm)","Pad 3 (polysynth)","Pad 4 (choir)",
+    "Pad 5 (bowed)","Pad 6 (metallic)","Pad 7 (halo)","Pad 8 (sweep)",
+    "FX 1 (rain)","FX 2 (soundtrack)","FX 3 (crystal)","FX 4 (atmosphere)",
+    "FX 5 (brightness)","FX 6 (goblins)","FX 7 (echoes)","FX 8 (sci-fi)",
+    "Sitar","Banjo","Shamisen","Koto",
+    "Kalimba","Bag pipe","Fiddle","Shanai",
+    "Tinkle Bell","Agogo","Steel Drums","Woodblock",
+    "Taiko Drum","Melodic Tom","Synth Drum","Reverse Cymbal",
+    "Guitar Fret Noise","Breath Noise","Seashore","Bird Tweet",
+    "Telephone Ring","Helicopter","Applause","Gunshot"
+];
+
+GM_NAMES.forEach((name, program) => {
+
+    const opt = document.createElement("option");
+
+    opt.value = String(program);
+    opt.textContent = `${program + 1}. ${name}`;
+
+    instrumentSelect.appendChild(opt);
+});
+
+/*
+    part-name 里没有 midi-program 时，靠名字猜一个乐器
+*/
+const NAME_HINTS = [
+    [/grand\s*piano|piano|钢琴/i, 0],
+    [/e\.?\s*piano|electric\s*piano|电钢琴/i, 4],
+    [/harpsichord|大键琴|羽管键琴/i, 6],
+    [/organ|风琴|管风琴/i, 19],
+    [/guitar|吉他/i, 25],
+    [/bass|贝斯|低音提琴?/i, 32],
+    [/violin|小提琴/i, 40],
+    [/viola|中提琴/i, 41],
+    [/cello|大提琴/i, 42],
+    [/contrabass|double\s*bass|低音提琴/i, 43],
+    [/strings?|弦乐/i, 48],
+    [/choir|voices?|合唱/i, 52],
+    [/trumpet|小号/i, 56],
+    [/trombone|长号/i, 57],
+    [/tuba|大号/i, 58],
+    [/horn|圆号/i, 60],
+    [/sax|萨克斯/i, 65],
+    [/oboe|双簧管/i, 68],
+    [/bassoon|巴松|大管/i, 70],
+    [/clarinet|单簧管/i, 71],
+    [/flute|长笛/i, 73],
+    [/piccolo|短笛/i, 72],
+    [/timpani|定音鼓/i, 47],
+    [/harp|竖琴/i, 46],
+    [/marimba|马林巴/i, 12],
+    [/vibraphone|颤音琴/i, 11],
+    [/sitar|西塔琴/i, 104]
+];
+
+/* =========================================================
+   MusicXML 解析
+========================================================= */
+
+const STEP_SEMITONE = {
+    C:0, D:2, E:4, F:5, G:7, A:9, B:11
+};
+
+const DYNAMIC_VELOCITY = {
+    pppp:8, ppp:16, pp:24, p:33, mp:49,
+    mf:64, f:80, ff:96, fff:112, ffff:126
+};
+
+/* =========================================================
+   MusicXML 编辑模型
+========================================================= */
+
+/*
+    拖动只落在“单个音符能够记谱”的时值上：
+    2.5 拍之类需要连线拆分的长度不在表里，否则会出现
+    duration=2.5、type=half 这种谱面与时值不一致的节点。
+*/
+/*
+    修改音符时值后，重新整理小节里的时间游标。
+    音符时值在原位置改变后，同一 XML 声部里后面的音符会自然
+    向前/向后移动；这里只需要修正 <backup> 的时长，并把声部
+    末尾剩余的时间用不可见的 <forward> 补齐。
+*/
+/*
+    从 MusicXML DOM 里建立“音符元素 ←→ 谱面位置”的索引。
+    OSMD 的 sourceNote 会给出小节、谱表、声部、拍点和音高，
+    用这些信息即可精确找到对应的 XML note 节点。
+*/
+function attachDurationDrag(handle, entry, opts){
+
+    handle.addEventListener("pointerdown", ev => {
+
+        if(ev.button !== 0) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        if(isPlaying) stopPlayback();
+
+        const startX = ev.clientX;
+        const oldQ = entry.durQ;
+        const grid = Math.max(0.03125, opts.getGrid());
+        const pxPerQ = Math.max(8, opts.getPxPerQ(entry));
+
+        const minQ = Math.min(grid, oldQ);
+
+        const centerX = parseFloat(handle.style.left) || 0;
+        const centerY = parseFloat(handle.style.top) || 0;
+
+        const layer = handle.parentElement;
+
+        const ghost = document.createElement("div");
+        ghost.className = "drag-ghost";
+        ghost.style.left = centerX + "px";
+        ghost.style.top = (centerY - 2.5) + "px";
+        ghost.style.width = Math.max(2, oldQ * pxPerQ) + "px";
+
+        const label = document.createElement("div");
+        label.className = "drag-label";
+        label.innerHTML =
+            durationLabel(oldQ) +
+            '<small>↔ 拖动</small>';
+
+        layer.appendChild(ghost);
+        layer.appendChild(label);
+
+        handle.classList.add("dragging");
+
+        const prevUserSelect = document.body.style.userSelect;
+        document.body.style.userSelect = "none";
+
+        let newQ = oldQ;
+        let moved = false;
+        let finished = false;
+
+        const paint = () => {
+
+            const width = Math.max(2, newQ * pxPerQ);
+
+            ghost.style.width = width + "px";
+
+            const layerWidth = layer.clientWidth || 0;
+            const labelX = Math.min(
+                Math.max(centerX + width, 60),
+                Math.max(60, layerWidth - 10)
+            );
+
+            label.style.left = labelX + "px";
+            label.style.top = (centerY - 10) + "px";
+
+            label.innerHTML =
+                durationLabel(newQ) +
+                `<small>${newQ > oldQ ? "加长" : "缩短"}</small>`;
+        };
+
+        const onMove = e => {
+
+            if(finished) return;
+
+            if(e.cancelable) e.preventDefault();
+
+            const dx = e.clientX - startX;
+
+            if(Math.abs(dx) >= 2) moved = true;
+
+            let q = oldQ + dx / pxPerQ;
+
+            q = Math.round(q / grid) * grid;
+
+            if(q > entry.maxDurQ){
+                q = Math.floor(entry.maxDurQ / grid + 1e-6) * grid;
+            }
+
+            q = Math.max(minQ, q);
+
+            newQ = snapNotatedDuration(
+                Math.min(entry.maxDurQ, Math.max(minQ, q)),
+                minQ,
+                entry.maxDurQ,
+                grid,
+                oldQ
+            );
+
+            newQ = Number(newQ.toFixed(4));
+
+            paint();
+        };
+
+        const cleanup = () => {
+
+            if(finished) return;
+            finished = true;
+
+            window.removeEventListener("pointermove", onMove, true);
+            window.removeEventListener("pointerup", onUp, true);
+            window.removeEventListener("pointercancel", onCancel, true);
+
+            handle.classList.remove("dragging");
+
+            ghost.remove();
+            label.remove();
+
+            document.body.style.userSelect = prevUserSelect;
+
+            try{
+                if(handle.hasPointerCapture?.(ev.pointerId)){
+                    handle.releasePointerCapture(ev.pointerId);
+                }
+            }catch(e){}
+        };
+
+        const onUp = e => {
+
+            if(finished) return;
+
+            cleanup();
+
+            if(
+                !moved ||
+                Math.abs(newQ - oldQ) < 1e-5
+            ){
+                return;
+            }
+
+            opts.onApply(entry, newQ);
+        };
+
+        const onCancel = () => cleanup();
+
+        try{
+            handle.setPointerCapture?.(ev.pointerId);
+        }catch(e){}
+
+        window.addEventListener("pointermove", onMove, true);
+        window.addEventListener("pointerup", onUp, true);
+        window.addEventListener("pointercancel", onCancel, true);
+
+        paint();
+    });
+}
+
+function createNoteEditLayer(container, osmdInstance, model, opts){
+
+    container.querySelectorAll(".note-edit-layer")
+        .forEach(el => el.remove());
+
+    if(!osmdInstance || !model) return null;
+
+    model.entries.forEach(e => e._used = false);
+
+    const layer = document.createElement("div");
+    layer.className = "note-edit-layer";
+
+    const ml = osmdInstance.GraphicSheet?.MeasureList || [];
+
+    for(let mi = 0; mi < ml.length; mi++){
+
+        const staffMeasures = ml[mi];
+
+        if(!staffMeasures) continue;
+
+        for(let staffIdx = 0; staffIdx < staffMeasures.length; staffIdx++){
+
+            const sm = staffMeasures[staffIdx];
+            if(!sm) continue;
+
+            const instrument = sm.ParentStaff?.ParentInstrument;
+
+            const partIndex = graphicPartIndex(
+                osmdInstance,
+                instrument,
+                opts.fallbackPartIndex ?? 0
+            );
+
+            const staffNum = String(sm.ParentStaff?.Id || staffIdx + 1);
+
+            const staffEntries = sm.staffEntries || [];
+
+            staffEntries.forEach(se => {
+
+                const voiceEntries = se.graphicalVoiceEntries || [];
+
+                voiceEntries.forEach(gve => {
+
+                    const notes = gve.notes || [];
+
+                    notes.forEach(note => {
+
+                        const sn = note.sourceNote;
+
+                        if(!sn) return;
+                        if(sn.IsGraceNote) return;
+                        if(sn.isRestFlag) return;
+                        if(!sn.Pitch) return;
+
+                        const noteMi =
+                            sn.SourceMeasure?.measureListIndex ?? mi;
+
+                        const voice = String(
+                            sn.ParentVoiceEntry?.ParentVoice?.VoiceId ??
+                            sn.ParentVoice?.VoiceId ??
+                            1
+                        );
+
+                        const q =
+                            (sn.ParentVoiceEntry?.Timestamp?.RealValue ?? 0) * 4;
+
+                        const graphic = {
+                            mi: noteMi,
+                            partIndex,
+                            staff: staffNum,
+                            voice,
+                            // OSMD 的 halfTone 以“八度 0 = C-1”计，
+                            // 与 MIDI 的 C0=12 相差一个八度。
+                            midi: clamp((sn.halfTone ?? 0) + 12, 0, 127),
+                            q
+                        };
+
+                        const entry = findGraphicXmlEntry(model, graphic);
+
+                        if(!entry) return;
+                        if(opts.filter && !opts.filter(entry)) return;
+
+                        const ap = note.PositionAndShape?.AbsolutePosition;
+                        if(!ap) return;
+
+                        const pt = osmdPointToContainer(
+                            osmdInstance,
+                            container,
+                            ap.x * 10,
+                            ap.y * 10
+                        );
+
+                        if(!pt) return;
+
+                        const handle = document.createElement("div");
+                        handle.className = "note-handle";
+                        handle.style.left = pt.x + "px";
+                        handle.style.top = pt.y + "px";
+
+                        handle.dataset.voice  = entry.voice;
+                        handle.dataset.mi     = String(entry.mi);
+                        handle.dataset.startQ = formatQ(entry.startQ);
+                        handle.dataset.midi   = String(entry.midi);
+                        handle.dataset.chord  =
+                            String(chordGroupFor(entry.noteEl).length);
+
+                        handle.title =
+                            `声部 ${entry.voice} · ${durationLabel(entry.durQ)}` +
+                            "（左右拖动修改时值）";
+
+                        attachDurationDrag(handle, entry, opts);
+
+                        layer.appendChild(handle);
+                    });
+                });
+            });
+        }
+    }
+
+    container.appendChild(layer);
+
+    return layer;
+}
+
+/* =========================================================
+   右侧“歌眼”片段
+========================================================= */
+
+function buildSourceStructure(doc){
+
+    const structure = sourceStructure(doc);
+
+    sourcePartInfo = structure.parts;
+    sourceMeasureCount = structure.measureCount;
+
+    return structure;
+}
+
+function selectedPartIndex(){
+    const n = parseInt(snippetPartSelect.value, 10);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function populateSnippetVoices(preferredVoice=null){
+
+    const partIndex = selectedPartIndex();
+    const info = sourcePartInfo[partIndex];
+
+    snippetVoiceSelect.innerHTML = "";
+
+    if(!info){
+        snippetVoiceSelect.disabled = true;
+        updateSnippetCopyState();
+        return;
+    }
+
+    const staff = snippetStaffSelect.value || "1";
+
+    const counts = new Map();
+
+    directChildren(info.partEl, "measure").forEach(mEl => {
+
+        Array.from(mEl.querySelectorAll("note")).forEach(noteEl => {
+
+            const noteStaff = childText(noteEl, "staff") || "1";
+
+            if(noteStaff !== staff) return;
+
+            const voice = childText(noteEl, "voice") || "1";
+
+            if(!counts.has(voice)){
+                counts.set(voice, 0);
+            }
+
+            if(
+                !hasDirectChild(noteEl, "rest") &&
+                !hasDirectChild(noteEl, "grace") &&
+                directChild(noteEl, "pitch")
+            ){
+                counts.set(voice, counts.get(voice) + 1);
+            }
+        });
+    });
+
+    if(!counts.size){
+        counts.set("1", 0);
+    }
+
+    const voices = Array.from(counts.keys()).sort((a, b) => {
+
+        const na = parseInt(a, 10);
+        const nb = parseInt(b, 10);
+
+        if(Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+
+        return String(a).localeCompare(String(b));
+    });
+
+    const wanted =
+        preferredVoice && counts.has(preferredVoice)
+            ? preferredVoice
+            : voices.reduce((best, voice) =>
+                counts.get(voice) > counts.get(best) ? voice : best
+            , voices[0]);
+
+    voices.forEach(voice => {
+
+        const opt = document.createElement("option");
+
+        opt.value = voice;
+        opt.textContent =
+            `声部 ${voice} · ${counts.get(voice)} 个音符`;
+
+        if(voice === wanted) opt.selected = true;
+
+        snippetVoiceSelect.appendChild(opt);
+    });
+
+    snippetVoiceSelect.disabled = false;
+
+    updateSnippetCopyState();
+}
+
+function populateSnippetStaffs(preferredStaff=null){
+
+    const partIndex = selectedPartIndex();
+    const info = sourcePartInfo[partIndex];
+
+    snippetStaffSelect.innerHTML = "";
+
+    if(!info){
+        snippetStaffSelect.disabled = true;
+        populateSnippetVoices();
+        return;
+    }
+
+    for(let s = 1; s <= info.staves; s++){
+
+        const opt = document.createElement("option");
+
+        opt.value = String(s);
+        opt.textContent = `谱表 ${s}`;
+
+        if(preferredStaff && String(preferredStaff) === String(s)){
+            opt.selected = true;
+        }
+
+        snippetStaffSelect.appendChild(opt);
+    }
+
+    snippetStaffSelect.disabled = info.staves <= 1;
+
+    populateSnippetVoices();
+}
+
+function populateSnippetControls(){
+
+    snippetPartSelect.innerHTML = "";
+
+    if(!sourcePartInfo.length){
+
+        snippetPartSelect.disabled = true;
+        snippetStaffSelect.disabled = true;
+        snippetVoiceSelect.disabled = true;
+
+        snippetFrom.disabled = true;
+        snippetTo.disabled = true;
+
+        updateSnippetCopyState();
+        return;
+    }
+
+    sourcePartInfo.forEach(info => {
+
+        const opt = document.createElement("option");
+
+        opt.value = String(info.index);
+        opt.textContent =
+            `${info.index + 1}. ${info.name}`;
+
+        snippetPartSelect.appendChild(opt);
+    });
+
+    snippetPartSelect.disabled = false;
+
+    snippetFrom.disabled = false;
+    snippetTo.disabled = false;
+
+    snippetFrom.min = "1";
+    snippetFrom.max = String(sourceMeasureCount);
+    snippetTo.min = "1";
+    snippetTo.max = String(sourceMeasureCount);
+
+    snippetFrom.value = "1";
+    snippetTo.value = String(Math.min(16, sourceMeasureCount));
+
+    populateSnippetStaffs(1);
+}
+
+function updateSnippetCopyState(){
+
+    const ok =
+        !!sourceDoc &&
+        sourceMeasureCount > 0 &&
+        !!snippetVoiceSelect.value &&
+        !snippetVoiceSelect.disabled;
+
+    copySnippetBtn.disabled = !ok;
+    autoMelodyBtn.disabled = !(sourceDoc && sourceMeasureCount > 0);
+}
+
+function setSnippetStatus(text, isError=false){
+
+    snippetStatus.textContent = text;
+    snippetStatus.classList.toggle("error", !!isError);
+}
+
+/*
+    片段只截取整首曲谱中的一段，跨过片段边界的连音线 / 延音线
+    会缺少另一端的 start 或 stop。这里按出现顺序配对，
+    去掉起点之前没有 start 的 stop，以及结尾仍未闭合的 start。
+*/
+function clearSnippet(){
+
+    snippetDoc = null;
+    snippetXml = "";
+    snippetOriginalXml = "";
+    snippetOsmd = null;
+    snippetNoteModel = null;
+    snippetUndoStack = [];
+    snippetMeta = null;
+    snippetMeasurePosMap = [];
+
+    snippetContainer.innerHTML =
+        '<div class="snippet-empty">' +
+        '尚未复制片段。<br>' +
+        '选择声部和小节范围后点击“复制到右侧”。' +
+        '</div>';
+
+    snippetSaveBtn.disabled = true;
+    snippetUndoBtn.disabled = true;
+
+    setSnippetStatus("加载曲谱后，选择要提取的旋律声部。");
+}
+
+function buildSnippetOverlay(){
+
+    if(!snippetDoc || !snippetOsmd) return;
+
+    snippetNoteModel = collectXmlNotes(snippetDoc);
+
+    createNoteEditLayer(
+        snippetContainer,
+        snippetOsmd,
+        snippetNoteModel,
+        {
+            fallbackPartIndex: 0,
+            getGrid: () => dragGridQ,
+            getPxPerQ: entry => measurePxPerQ(
+                entry,
+                snippetMeasurePosMap,
+                snippetOsmd,
+                snippetContainer
+            ),
+            onApply: applySnippetDuration
+        }
+    );
+}
+
+async function renderSnippet(){
+
+    if(!snippetDoc) return;
+
+    const scrollTop  = snippetContainer.scrollTop;
+    const scrollLeft = snippetContainer.scrollLeft;
+
+    snippetContainer.innerHTML = "";
+
+    snippetOsmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(
+        "snippetScoreContainer",
+        {
+            autoResize:true,
+            drawingParameters:"compacttight",
+            drawTitle:false,
+            drawComposer:false,
+            drawLyricist:false,
+            drawPartNames:false,
+            drawMeasureNumbers:false,
+            followCursor:false
+        }
+    );
+
+    await snippetOsmd.load(snippetXml);
+    await snippetOsmd.render();
+
+    snippetMeasurePosMap = buildMeasurePosMapFrom(snippetOsmd);
+
+    snippetContainer.scrollTop  = scrollTop;
+    snippetContainer.scrollLeft = scrollLeft;
+
+    setTimeout(() => {
+
+        if(!snippetDoc || !snippetOsmd) return;
+
+        snippetMeasurePosMap = buildMeasurePosMapFrom(snippetOsmd);
+
+        buildSnippetOverlay();
+
+        snippetContainer.scrollTop  = scrollTop;
+        snippetContainer.scrollLeft = scrollLeft;
+
+    }, 120);
+}
+
+async function autoExtractMelody(){
+
+    if(!sourceDoc) return;
+
+    autoMelodyBtn.disabled = true;
+
+    setSnippetStatus("🔎 正在分析各声部的音区、音符密度与和弦比例…");
+
+    try{
+
+        const analysis = analyzeMelodyVoices(sourceDoc);
+
+        if(!analysis.best){
+            throw new Error("没有找到可抽取的旋律声部");
+        }
+
+        const best = analysis.best;
+
+        populateSnippetControls();
+
+        snippetPartSelect.value = String(best.partIndex);
+
+        populateSnippetStaffs(best.staff);
+        snippetStaffSelect.value = String(best.staff);
+
+        populateSnippetVoices(best.voice);
+        snippetVoiceSelect.value = String(best.voice);
+
+        const range = melodyRangeFor(best, sourceMeasureCount);
+
+        snippetFrom.value = String(range.fromIdx + 1);
+        snippetTo.value = String(range.toIdx + 1);
+
+        melodyTopOnly.checked = true;
+
+        updateSnippetCopyState();
+
+        await copySnippet();
+
+        if(snippetMeta){
+
+            const why = best.reasons.length
+                ? " · " + best.reasons.slice(0, 2).join("、")
+                : "";
+
+            setSnippetStatus(
+                `🎵 已自动抽取主旋律：${best.name} · ` +
+                `谱表${best.staff} · 声部${best.voice} · ` +
+                `第 ${range.fromIdx + 1}–${range.toIdx + 1} 小节 · ` +
+                `${best.onsetCount} 个发音点${why}`
+            );
+        }
+
+    }catch(e){
+
+        console.error(e);
+        setSnippetStatus("自动抽取失败：" + e.message, true);
+
+    }finally{
+
+        autoMelodyBtn.disabled = !(sourceDoc && sourceMeasureCount > 0);
+    }
+}
+
+async function copySnippet(){
+
+    if(!sourceDoc) return;
+
+    const partIndex = selectedPartIndex();
+    const staff = parseInt(snippetStaffSelect.value, 10) || 1;
+    const voice = snippetVoiceSelect.value || "1";
+
+    let fromIdx = Math.max(1, parseInt(snippetFrom.value, 10) || 1) - 1;
+    let toIdx = Math.min(
+        sourceMeasureCount,
+        parseInt(snippetTo.value, 10) || sourceMeasureCount
+    ) - 1;
+
+    if(fromIdx > toIdx){
+        [fromIdx, toIdx] = [toIdx, fromIdx];
+    }
+
+    snippetFrom.value = String(fromIdx + 1);
+    snippetTo.value = String(toIdx + 1);
+
+    setSnippetStatus("正在复制片段…");
+
+    try{
+
+        const result = buildSnippetXml(
+            partIndex,
+            staff,
+            voice,
+            fromIdx,
+            toIdx,
+            { topOnly: melodyTopOnly.checked }
+        );
+
+        const doc = new DOMParser().parseFromString(
+            result.xml,
+            "application/xml"
+        );
+
+        if(doc.querySelector("parsererror")){
+            throw new Error("生成的片段 MusicXML 不合法");
+        }
+
+        snippetDoc = doc;
+        snippetXml = result.xml;
+        snippetOriginalXml = result.xml;
+        snippetUndoStack = [];
+        snippetMeta = result;
+
+        await renderSnippet();
+
+        snippetSaveBtn.disabled = false;
+        snippetUndoBtn.disabled = true;
+
+        setSnippetStatus(
+            `已复制 ${result.partName} · 谱表${staff} · 声部${voice} · ` +
+            `小节 ${fromIdx + 1}–${toIdx + 1} · ` +
+            `${result.noteCount} 个音符` +
+            (result.topOnly ? " · 已压成单旋律" : "")
+        );
+
+    }catch(e){
+
+        console.error(e);
+
+        snippetDoc = null;
+        snippetXml = "";
+        snippetOsmd = null;
+
+        snippetContainer.innerHTML =
+            '<div class="snippet-empty">片段生成失败。</div>';
+
+        snippetSaveBtn.disabled = true;
+        snippetUndoBtn.disabled = true;
+
+        setSnippetStatus("复制失败：" + e.message, true);
+    }
+}
+
+async function applySnippetDuration(entry, newQ){
+
+    if(!snippetDoc) return;
+
+    snippetUndoStack.push(serializeMusicXml(snippetDoc));
+    if(snippetUndoStack.length > 40) snippetUndoStack.shift();
+
+    const oldQ = entry.durQ;
+    const actualQ = applyDurationToXmlNote(entry, newQ, dragGridQ);
+
+    if(Math.abs(actualQ - oldQ) < 1e-5){
+        snippetUndoStack.pop();
+        return;
+    }
+
+    snippetXml = serializeMusicXml(snippetDoc);
+
+    try{
+
+        await renderSnippet();
+
+        snippetUndoBtn.disabled = snippetUndoStack.length === 0;
+        snippetSaveBtn.disabled = false;
+
+        setSnippetStatus(
+            `✏️ 片段音符时值：${formatQ(oldQ)} → ${formatQ(actualQ)} 拍`
+        );
+
+    }catch(e){
+
+        console.error(e);
+        setSnippetStatus("更新片段失败：" + e.message, true);
+    }
+}
+
+async function undoSnippetEdit(){
+
+    const xml = snippetUndoStack.pop();
+
+    if(!xml) return;
+
+    snippetDoc = new DOMParser().parseFromString(
+        xml,
+        "application/xml"
+    );
+
+    snippetXml = serializeMusicXml(snippetDoc);
+
+    await renderSnippet();
+
+    snippetUndoBtn.disabled = snippetUndoStack.length === 0;
+
+    setSnippetStatus("↶ 已撤销片段中的时值修改");
+}
+
+function saveSnippet(){
+
+    if(!snippetDoc || !snippetMeta) return;
+
+    const name =
+        `歌眼_${baseFileName(snippetMeta.partName)}_` +
+        `谱表${snippetMeta.staff}_声部${snippetMeta.voice}_` +
+        `${snippetMeta.fromIdx + 1}-${snippetMeta.toIdx + 1}.musicxml`;
+
+    downloadXml(
+        name,
+        serializeMusicXml(snippetDoc, true)
+    );
+
+    setSnippetStatus(`💾 已导出片段：${name}`);
+}
+
+/*
+    给后续“歌眼 → 简谱”转换预留的结构化数据。
+    这里不生成简谱，只把片段音符整理成稳定的时间/音高序列。
+*/
+function getSnippetData(){
+
+    if(!snippetDoc) return null;
+
+    const model = collectXmlNotes(snippetDoc);
+
+    const notes = model.entries
+        .filter(e => !e.isRest && !e.isGrace)
+        .sort((a, b) => a.mi - b.mi || a.startQ - b.startQ)
+        .map(e => {
+
+            const pitchEl = directChild(e.noteEl, "pitch");
+
+            return {
+                measure: e.mi + 1,
+                startQ: e.startQ,
+                durQ: e.durQ,
+                midi: e.midi,
+                step: childText(pitchEl, "step"),
+                alter: parseFloat(childText(pitchEl, "alter")) || 0,
+                octave: parseInt(childText(pitchEl, "octave"), 10) || 4,
+                tieStart: Array.from(e.noteEl.querySelectorAll("tie"))
+                    .some(t => t.getAttribute("type") === "start"),
+                tieStop: Array.from(e.noteEl.querySelectorAll("tie"))
+                    .some(t => t.getAttribute("type") === "stop")
+            };
+        });
+
+    const firstInfo = model.measureInfoByIndex[0] || {};
+
+    const keyFifths = parseInt(
+        snippetDoc.querySelector("attributes > key > fifths")
+            ?.textContent || "0",
+        10
+    ) || 0;
+
+    const tempo = parseFloat(
+        snippetDoc.querySelector("sound[tempo]")?.getAttribute("tempo") || "0"
+    ) || 0;
+
+    return {
+        xml: snippetXml,
+        meta: snippetMeta,
+        beats: firstInfo.beats || 4,
+        beatType: firstInfo.beatType || 4,
+        divisions: firstInfo.divisions || 1,
+        keyFifths,
+        tempo,
+        notes
+    };
+}
+
+
+
+let measurePosMap = [];
+let lastHighlightedMeasure = null;
+
+function initOSMD(){
+
+    scoreContainer.innerHTML = "";
+
+    osmd =
+        new opensheetmusicdisplay.OpenSheetMusicDisplay(
+            "scoreContainer",
+            {
+                autoResize:true,
+                drawingParameters:"compacttight",
+                drawTitle:true,
+                followCursor:false
+            }
+        );
+}
+
+async function renderScore(xml){
+
+    await osmd.load(xml);
+    await osmd.render();
+}
+
+/* =========================================================
+   Measure Position
+========================================================= */
+
+function buildMeasurePosMap(){
+
+    measurePosMap = buildMeasurePosMapFrom(osmd);
+
+    /* 窗口缩放后重新贴一次高亮 */
+
+    if(isPlaying && lastHighlightedMeasure != null){
+
+        highlightMeasure(lastHighlightedMeasure);
+    }
+}
+
+/* =========================================================
+   Playback
+========================================================= */
+
+function currentPrograms(){
+
+    const override = instrumentSelect.value;
+
+    return scoreParts.map(part => ({
+
+        channel: part.channel,
+        program:
+            override === "auto"
+                ? part.program
+                : clamp(parseInt(override, 10), 0, 127),
+        volume: part.volume,
+        pan: part.pan
+    }));
+}
+
+function stopPlayback(){
+
+    playbackId++;
+
+    isPlaying = false;
+
+    clearInterval(schedulerTimer);
+    schedulerTimer = null;
+
+    timerIds.forEach(clearTimeout);
+    timerIds = [];
+
+    if(synth && audioCtx){
+
+        const now = audioCtx.currentTime;
+
+        /*
+            记录旧队列的到期时间。停止后立刻重播时，
+            startPlayback 会等这批旧事件过期再解除静音。
+        */
+        scheduledUntil = Math.max(
+            scheduledUntil,
+            now + SCHEDULE_LOOKAHEAD
+        );
+
+        /*
+            先把输出压到 0 再停音符：
+            worklet 队列里最多还有 300ms 已排好的事件，
+            静音能保证按下停止后立刻听不到声音，
+            稍后再补一次 stopAll 清掉这些音。
+        */
+
+        if(masterGain){
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+            masterGain.gain.linearRampToValueAtTime(0, now + 0.02);
+        }
+
+        try{
+            synth.stopAll(true);
+        }catch(e){}
+
+        clearTimeout(panicTimer);
+
+        panicTimer = setTimeout(() => {
+
+            try{
+                synth.stopAll(true);
+            }catch(e){}
+
+            /*
+                这里不恢复音量：保持静音直到下一次播放，
+                这样即使有滞留的释音尾巴也绝不会漏出来。
+            */
+
+            panicTimer = null;
+
+        }, SCHEDULE_LOOKAHEAD * 1000 + 250);
+    }
+
+    hideHighlight();
+
+    playBtn.disabled = false;
+    stopBtn.disabled = true;
+}
+
+function sendTimelineEvent(ev, at){
+
+    const options = { time: at };
+
+    if(ev.type === "on"){
+
+        synth.noteOn(ev.channel, ev.midi, ev.velocity, options);
+    }
+    else if(ev.type === "off"){
+
+        synth.noteOff(ev.channel, ev.midi, options);
+    }
+    else{
+
+        synth.controllerChange(
+            ev.channel,
+            ev.controller,
+            ev.value,
+            options
+        );
+    }
+}
+
+async function startPlayback(){
+
+    if(!timeline.length) return;
+
+    stopPlayback();
+
+    const myPlaybackId = ++playbackId;
+
+    isPlaying = true;
+
+    playBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    try{
+
+        await ensureSoundfont();
+
+    }catch(e){
+
+        isPlaying = false;
+
+        playBtn.disabled = false;
+        stopBtn.disabled = true;
+
+        setStatus(
+            "❌ 音色库加载失败：" + e.message +
+            "（请用本地服务器打开页面）",
+            true
+        );
+
+        return;
+    }
+
+    if(myPlaybackId !== playbackId) return;
+
+    clearTimeout(panicTimer);
+    panicTimer = null;
+
+    /* 布局稳定后校准一次小节坐标（滚动条出现会让视口宽度变化） */
+    buildMeasurePosMap();
+
+    const ctx  = audioCtx;
+    const now0 = ctx.currentTime;
+
+    /*
+        如果刚刚停止过，worklet 里还留着上一次排到未来
+        300ms 左右的事件。等它们过期后再解除静音，避免
+        旧音符在新一次播放开头漏出来。
+    */
+    const t0 = Math.max(
+        now0 + SCHEDULE_LOOKAHEAD,
+        scheduledUntil + 0.05
+    );
+
+    audioGateUntil = t0;
+
+    if(masterGain){
+
+        const g = masterGain.gain;
+        const fadeAt = Math.max(now0, t0 - 0.02);
+
+        g.cancelScheduledValues(now0);
+        g.setValueAtTime(0, now0);
+        g.setValueAtTime(0, fadeAt);
+        g.linearRampToValueAtTime(targetVolume, t0);
+    }
+
+    const speed = 1 / (tempoMultiplier || 1);
+
+    // 清掉上一次可能还在发声的音（队列里的旧事件已靠静音隔离）
+    synth.stopAll(true);
+
+    const programs = currentPrograms();
+
+    programs.forEach(p => {
+
+        synth.programChange(p.channel, p.program, { time:t0 });
+        synth.controllerChange(p.channel, 7,  p.volume, { time:t0 });
+        synth.controllerChange(p.channel, 10, clamp(p.pan + 64, 0, 127), { time:t0 });
+        synth.controllerChange(p.channel, 64, 0, { time:t0 });
+    });
+
+    /*
+        只把接下来 300ms 的事件交给 worklet，
+        避免整首曲子的 noteOn 提前排在队列里无法撤销。
+    */
+
+    let eventIndex = 0;
+
+    const feed = () => {
+
+        if(myPlaybackId !== playbackId) return;
+
+        const now = ctx.currentTime;
+        const horizon = now + SCHEDULE_LOOKAHEAD;
+
+        while(eventIndex < timeline.length){
+
+            const ev = timeline[eventIndex];
+            const at = t0 + ev.startSec * speed;
+
+            if(at > horizon) break;
+
+            const when = Math.max(at, now);
+
+            sendTimelineEvent(ev, when);
+
+            scheduledUntil = Math.max(scheduledUntil, when);
+
+            eventIndex++;
+        }
+
+        if(eventIndex >= timeline.length){
+
+            clearInterval(schedulerTimer);
+            schedulerTimer = null;
+        }
+    };
+
+    feed();
+    schedulerTimer = setInterval(feed, 25);
+
+    setStatus(
+        `🎶 播放中… ${scoreParts.length} 声部 · ` +
+        `${scoreParts.map(p => p.name).join(" / ")}`
+    );
+
+    /* -------- 光标 -------- */
+
+    const leadMs = Math.max(0, (t0 - ctx.currentTime) * 1000);
+
+    measureEvents.forEach(ev => {
+
+        const ms = ev.startSec * speed * 1000;
+
+        const tid = setTimeout(() => {
+
+            if(isPlaying && myPlaybackId === playbackId){
+                highlightMeasure(ev.measureIndex);
+            }
+
+        }, leadMs + Math.max(0, ms));
+
+        timerIds.push(tid);
+    });
+
+    /* -------- 结束 -------- */
+
+    const endId = setTimeout(() => {
+
+        if(isPlaying && myPlaybackId === playbackId){
+
+            stopPlayback();
+            setStatus("✅ 播放完毕");
+        }
+
+    }, leadMs + totalSec * speed * 1000 + 1500);
+
+    timerIds.push(endId);
+}
+
+function applyParsedScore(result){
+
+    timeline      = result.timeline;
+    measureEvents = result.measureEvents;
+    totalSec      = result.totalSec;
+    scoreParts    = result.scoreParts;
+
+    return result;
+}
+
+function buildSnippetXml(partIndex, staffNo, voiceId, fromIdx, toIdx, options={}){
+
+    return buildVoiceSnippetXml(
+        sourceDoc,
+        partIndex,
+        staffNo,
+        voiceId,
+        fromIdx,
+        toIdx,
+        options
+    );
+}
+
+/* =========================================================
+   Load
+========================================================= */
+
+async function loadScore(xml, fileName){
+
+    stopPlayback();
+
+    setStatus("📖 正在解析...");
+
+    playBtn.disabled = true;
+
+    try{
+
+        const doc = new DOMParser().parseFromString(
+            xml,
+            "application/xml"
+        );
+
+        if(doc.querySelector("parsererror")){
+            throw new Error("MusicXML 不是合法的 XML");
+        }
+
+        sourceDoc      = doc;
+        originalXml    = xml;
+        loadedFileName = fileName || "score.musicxml";
+        parsedFileName = loadedFileName;
+
+        initOSMD();
+
+        await renderScore(xml);
+
+        const info = applyParsedScore(parseMusicXML(xml, doc));
+
+        buildMeasurePosMap();
+
+        buildSourceStructure(doc);
+
+        populateSnippetControls();
+
+        clearSnippet();
+
+        /* 滚动条出现 / OSMD 自动重排后，再校准一次 */
+        setTimeout(() => {
+
+            if(osmd) buildMeasurePosMap();
+
+        }, 350);
+
+        playBtn.disabled = false;
+
+        setStatus(
+            `✅ ${loadedFileName} · ${info.partCount} 声部 · ` +
+            scoreParts
+                .map(p => `${p.name} (${GM_NAMES[p.program]})`)
+                .join(" / ")
+        );
+
+    }catch(e){
+
+        console.error(e);
+
+        setStatus(
+            "❌ 解析失败：" + e.message,
+            true
+        );
+    }
+}
+
+/* =========================================================
+   Events
+========================================================= */
+
+fileInput.addEventListener("change", e => {
+
+    const f = e.target.files[0];
+
+    if(!f) return;
+
+    const reader = new FileReader();
+
+    reader.onload = async ev => {
+
+        await loadScore(ev.target.result, f.name);
+    };
+
+    reader.readAsText(f);
+});
+
+playBtn.addEventListener("click", startPlayback);
+
+stopBtn.addEventListener("click", () => {
+
+    stopPlayback();
+
+    setStatus("⏸ 已停止");
+});
+
+/* =========================================================
+   歌眼片段事件
+========================================================= */
+
+gridSelect.addEventListener("change", () => {
+
+    dragGridQ = parseFloat(gridSelect.value) || 0.5;
+});
+
+snippetPartSelect.addEventListener("change", () => {
+    populateSnippetStaffs(1);
+});
+
+snippetStaffSelect.addEventListener("change", () => {
+    populateSnippetVoices();
+});
+
+snippetVoiceSelect.addEventListener("change", () => {
+    updateSnippetCopyState();
+});
+
+snippetFrom.addEventListener("input", updateSnippetCopyState);
+snippetTo.addEventListener("input", updateSnippetCopyState);
+
+autoMelodyBtn.addEventListener("click", () => {
+    autoExtractMelody();
+});
+
+copySnippetBtn.addEventListener("click", () => {
+    copySnippet();
+});
+
+snippetUndoBtn.addEventListener("click", () => {
+    undoSnippetEdit();
+});
+
+snippetSaveBtn.addEventListener("click", () => {
+    saveSnippet();
+});
+
+window.addEventListener("keydown", e => {
+
+    if(!(e.ctrlKey || e.metaKey)) return;
+    if(e.key.toLowerCase() !== "z") return;
+
+    const tag = document.activeElement?.tagName;
+
+    if(tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+    if(snippetUndoStack.length){
+        e.preventDefault();
+        undoSnippetEdit();
+    }
+});
+
+tempoSlider.addEventListener("input", () => {
+
+    tempoMultiplier =
+        parseInt(tempoSlider.value) / 100;
+
+    tempoText.textContent = tempoSlider.value + "%";
+});
+
+volumeSlider.addEventListener("input", () => {
+
+    targetVolume = parseInt(volumeSlider.value, 10) / 100;
+
+    if(masterGain && isPlaying && !panicTimer){
+
+        const now = audioCtx.currentTime;
+
+        /* 新一次播放还没真正开始：保持静音，音量在 t0 生效 */
+        if(now >= audioGateUntil){
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(targetVolume, now);
+        }
+        else{
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(0, now);
+            masterGain.gain.setValueAtTime(
+                0,
+                Math.max(now, audioGateUntil - 0.02)
+            );
+            masterGain.gain.linearRampToValueAtTime(
+                targetVolume,
+                audioGateUntil
+            );
+        }
+    }
+});
+
+instrumentSelect.addEventListener("change", () => {
+
+    if(!synth) return;
+
+    const t = audioCtx.currentTime;
+
+    currentPrograms().forEach(p => {
+
+        synth.programChange(p.channel, p.program, { time:t });
+    });
+});
+
+window.addEventListener("resize", () => {
+
+    setTimeout(() => {
+
+        buildMeasurePosMap();
+
+        if(snippetDoc && snippetOsmd){
+
+            snippetMeasurePosMap = buildMeasurePosMapFrom(snippetOsmd);
+
+            buildSnippetOverlay();
+        }
+
+    }, 250);
+});
+
+if(new URLSearchParams(location.search).has("debug")){
+
+    // 调试钩子：只在 extract.html?debug=1 时暴露，方便排查解析/发声问题
+    window.__player = {
+        get timeline(){ return timeline; },
+        get parts(){ return scoreParts; },
+        get totalSec(){ return totalSec; },
+        get soundfontReady(){ return soundfontReady; },
+        get synth(){ return synth; },
+        get audioCtx(){ return audioCtx; },
+        get loudnessGain(){ return loudnessGain; },
+        get masterGain(){ return masterGain; },
+        get isPlaying(){ return isPlaying; },
+        get lastMeasure(){ return lastHighlightedMeasure; },
+        get posMap(){ return measurePosMap; },
+        get osmd(){ return osmd; },
+        get sourceDoc(){ return sourceDoc; },
+        get snippetDoc(){ return snippetDoc; },
+        get snippetXml(){ return snippetXml; },
+        get snippetMeta(){ return snippetMeta; },
+        get snippetData(){ return getSnippetData(); },
+        get snippetPosMap(){ return snippetMeasurePosMap; },
+        get snippetOsmd(){ return snippetOsmd; },
+        collectXmlNotes: doc => collectXmlNotes(doc || sourceDoc),
+        buildSnippetXml: (part, staff, voice, from, to, options) =>
+            buildSnippetXml(part, staff, voice, from, to, options),
+        analyzeMelodyVoices: () => analyzeMelodyVoices(sourceDoc),
+        autoExtractMelody,
+        rebuild: () => buildMeasurePosMap(),
+        get scoreWrapper(){ return scoreWrapper; },
+        loadScore
+    };
+}
+
+initFeatureNav("extract.html");
+
+setStatus("🎼 就绪，请加载 MusicXML 文件");
+
+/* 页面空闲时预取音色库，第一次点播放就不用等 */
+
+if(location.protocol !== "file:"){
+
+    const idle =
+        window.requestIdleCallback ||
+        (fn => setTimeout(fn, 800));
+
+    idle(() => {
+
+        ensureSoundfont().then(() => {
+
+            if(!isPlaying && !parsedFileName){
+                setStatus("🎼 音色库就绪，请加载 MusicXML 文件");
+            }
+
+        }).catch(e => console.warn("音色库预加载失败：", e));
+    });
+}
+
+</script>
+
+</body>
+</html>

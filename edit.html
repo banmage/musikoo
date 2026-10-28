@@ -1,0 +1,3781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" href="data:,">
+
+<title>MusicXML 谱面编辑器（SF2 真实音色版）</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:24px;
+    background:#eef3f8;
+    font-family:system-ui,-apple-system,sans-serif;
+}
+
+.app{
+    max-width:1820px;
+    margin:auto;
+    display:flex;
+    flex-direction:column;
+    height:calc(100vh - 48px);
+    min-height:560px;
+    background:#fff;
+    border-radius:28px;
+    overflow:hidden;
+    box-shadow:0 18px 40px rgba(0,0,0,.18);
+}
+
+.toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:12px;
+    padding:18px 24px;
+    border-bottom:1px solid #e9edf2;
+    background:#fbfdff;
+}
+
+.file-btn{
+    background:#182433;
+    color:#fff;
+    border-radius:999px;
+    padding:10px 18px;
+    font-weight:600;
+    cursor:pointer;
+    user-select:none;
+}
+
+.file-btn input{
+    display:none;
+}
+
+button{
+    border:none;
+    border-radius:999px;
+    padding:10px 22px;
+    font-weight:600;
+    cursor:pointer;
+}
+
+button:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+}
+
+#playBtn{
+    background:#1d7b3e;
+    color:#fff;
+}
+
+#stopBtn{
+    background:#b43d2f;
+    color:#fff;
+}
+
+.status{
+    margin-left:auto;
+    background:#edf3ff;
+    color:#24436c;
+    padding:8px 16px;
+    border-radius:999px;
+    font-size:.88rem;
+    max-width:52ch;
+}
+
+.tempo,
+.volume,
+.instrument{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:.9rem;
+    color:#3a4a5e;
+}
+
+.tempo input,
+.volume input{
+    width:110px;
+}
+
+.instrument select{
+    border:1px solid #d6dee8;
+    border-radius:999px;
+    padding:7px 12px;
+    background:#fff;
+    color:#182433;
+    font:inherit;
+    font-size:.85rem;
+    max-width:210px;
+}
+
+#scoreWrapper{
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    overflow:auto;
+    background:#fffdf8;
+    padding:24px;
+}
+
+#scoreContainer{
+    position:relative;
+}
+
+/* 当前播放小节的浅粉色高亮 */
+#measureHighlight{
+    position:absolute;
+    display:none;
+    z-index:5;
+    pointer-events:none;
+    border-radius:6px;
+    background:rgba(255,150,185,.26);
+    box-shadow:
+        inset 0 0 0 1.5px rgba(240,110,155,.35),
+        0 0 10px rgba(255,150,185,.35);
+}
+
+/* =========================================================
+   编辑工具 / 右侧歌眼面板
+========================================================= */
+
+.edit-tools{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding-left:10px;
+    border-left:1px solid #e4eaf1;
+}
+
+.edit-tools button{
+    padding:8px 13px;
+    font-size:.82rem;
+    background:#e9eff6;
+    color:#27384c;
+}
+
+#editBtn{
+    background:#2f5f9e;
+    color:#fff;
+}
+
+#editBtn.active{
+    background:#d98324;
+}
+
+#undoBtn,
+#resetBtn{
+    background:#f1f4f7;
+}
+
+#saveBtn{
+    background:#17654a;
+    color:#fff;
+}
+
+#resetBtn{
+    background:#f6e9e7;
+    color:#8e3327;
+}
+
+.grid-label{
+    display:flex;
+    align-items:center;
+    gap:5px;
+    color:#56667a;
+    font-size:.78rem;
+}
+
+.grid-label select{
+    border:1px solid #d6dee8;
+    border-radius:8px;
+    padding:5px 7px;
+    background:#fff;
+    color:#27384c;
+    font:inherit;
+    font-size:.78rem;
+}
+
+.main-area{
+    display:flex;
+    flex:1 1 auto;
+    min-height:0;
+    min-width:0;
+}
+
+#sidePanel{
+    display:flex;
+    flex-direction:column;
+    flex:0 0 390px;
+    width:390px;
+    min-width:330px;
+    border-left:1px solid #e9edf2;
+    background:#fbfdff;
+    overflow:auto;
+}
+
+.side-head{
+    padding:20px 20px 12px;
+    border-bottom:1px solid #edf2f5;
+}
+
+.side-head h2{
+    margin:0 0 6px;
+    font-size:1.02rem;
+    color:#1c2d40;
+    letter-spacing:.02em;
+}
+
+.side-head p{
+    margin:0;
+    color:#7b8797;
+    font-size:.76rem;
+    line-height:1.6;
+}
+
+.snippet-form{
+    padding:14px 20px;
+    border-bottom:1px solid #edf2f5;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.snippet-form label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:.8rem;
+    color:#425166;
+}
+
+.snippet-form label > span{
+    flex:0 0 42px;
+}
+
+.snippet-form select,
+.snippet-form input{
+    flex:1 1 auto;
+    min-width:0;
+    border:1px solid #d6dee8;
+    border-radius:9px;
+    padding:7px 9px;
+    background:#fff;
+    color:#1c2d40;
+    font:inherit;
+    font-size:.8rem;
+}
+
+.range-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+}
+
+.range-row .range-item{
+    flex:1 1 0;
+    min-width:0;
+}
+
+.range-row .range-item span{
+    flex:0 0 auto;
+}
+
+.range-sep{
+    color:#93a0b1;
+    font-size:.8rem;
+}
+
+.snippet-hint{
+    color:#7b8797;
+    font-size:.75rem;
+    line-height:1.55;
+    min-height:1.2em;
+}
+
+.snippet-hint.error{
+    color:#b33a2b;
+}
+
+.snippet-foot{
+    padding:12px 20px 18px;
+    color:#8b96a5;
+    font-size:.72rem;
+    line-height:1.6;
+    border-top:1px solid #edf2f5;
+}
+
+/* 音符拖动覆盖层 */
+.note-edit-layer{
+    position:absolute;
+    inset:0;
+    z-index:8;
+    pointer-events:none;
+}
+
+.note-handle{
+    position:absolute;
+    width:16px;
+    height:16px;
+    margin:-8px 0 0 -8px;
+    border-radius:50%;
+    border:1.5px solid rgba(233,126,29,.0);
+    background:rgba(233,126,29,0);
+    pointer-events:auto;
+    cursor:ew-resize;
+    touch-action:none;
+    transition:background .12s ease, border-color .12s ease, box-shadow .12s ease;
+}
+
+.note-handle::after{
+    content:"";
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:5px;
+    height:5px;
+    margin:-2.5px 0 0 -2.5px;
+    border-radius:50%;
+    background:rgba(205,102,15,.45);
+    transition:opacity .12s ease;
+}
+
+.note-handle:hover,
+.note-handle.active{
+    background:rgba(255,176,84,.35);
+    border-color:rgba(205,102,15,.85);
+    box-shadow:0 0 0 3px rgba(255,176,84,.2);
+}
+
+.note-handle:hover::after,
+.note-handle.active::after{
+    opacity:0;
+}
+
+.note-handle.dragging{
+    background:rgba(255,154,44,.55);
+    border-color:#b8620b;
+    box-shadow:0 0 0 4px rgba(255,154,44,.22);
+}
+
+.drag-ghost{
+    position:absolute;
+    height:5px;
+    border-radius:4px;
+    background:linear-gradient(90deg,rgba(219,124,24,.25),rgba(219,124,24,.75));
+    box-shadow:0 0 8px rgba(219,124,24,.35);
+    pointer-events:none;
+    z-index:9;
+}
+
+.drag-label{
+    position:absolute;
+    transform:translate(-50%,-100%);
+    background:#25384f;
+    color:#fff;
+    border-radius:8px;
+    padding:5px 9px;
+    font-size:.72rem;
+    white-space:nowrap;
+    box-shadow:0 4px 12px rgba(0,0,0,.22);
+    pointer-events:none;
+    z-index:10;
+}
+
+.drag-label small{
+    opacity:.72;
+    margin-left:5px;
+}
+
+@media (max-width:1100px){
+
+    .app{
+        height:auto;
+        min-height:100vh;
+    }
+
+    .main-area{
+        flex-direction:column;
+    }
+
+    #scoreWrapper{
+        min-height:60vh;
+    }
+
+    #sidePanel{
+        flex:0 0 auto;
+        width:100%;
+        min-width:0;
+        border-left:none;
+        border-top:1px solid #e9edf2;
+    }
+
+}
+
+
+footer{
+    text-align:center;
+    padding:12px;
+    color:#7d8796;
+    font-size:.78rem;
+    border-top:1px solid #edf2f5;
+}
+
+
+/* =========================================================
+   全谱编辑面板
+========================================================= */
+
+.edit-section-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    font-size:.8rem;
+    font-weight:600;
+    color:#33465c;
+    letter-spacing:.02em;
+}
+
+.edit-section-title span{
+    color:#8b96a5;
+    font-weight:500;
+}
+
+.selection-info{
+    min-height:2.4em;
+    padding:8px 10px;
+    border:1px dashed #dfe7ef;
+    border-radius:9px;
+    background:#fff;
+    color:#5e6d80;
+    font-size:.76rem;
+    line-height:1.55;
+}
+
+.chord-editor{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    padding:9px 10px;
+    border:1px solid #e2eaf2;
+    border-radius:9px;
+    background:#f8fbfe;
+}
+
+.chord-editor[hidden]{
+    display:none;
+}
+
+.chord-editor-title{
+    font-size:.72rem;
+    font-weight:600;
+    color:#56667a;
+}
+
+.chord-chips{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+}
+
+.chord-chip{
+    border:1px solid #d3deea;
+    border-radius:999px;
+    padding:4px 10px;
+    background:#fff;
+    color:#33465c;
+    font-size:.74rem;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.chord-chip:hover{
+    background:#eef4fb;
+}
+
+.chord-chip.active{
+    background:#2f5f9e;
+    border-color:#2f5f9e;
+    color:#fff;
+}
+
+.chord-group-label{
+    flex:1 0 100%;
+    font-size:.7rem;
+    color:#8b96a5;
+}
+
+.edit-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+}
+
+.edit-actions button{
+    padding:8px 11px;
+    font-size:.76rem;
+    background:#e9eff6;
+    color:#27384c;
+}
+
+#deleteNoteBtn{
+    background:#f6e9e7;
+    color:#8e3327;
+}
+
+#tieBtn,
+#slurBtn{
+    background:#eaf3e6;
+    color:#2e6034;
+}
+
+#durDownBtn,
+#durUpBtn{
+    background:#eef3f9;
+    color:#23425f;
+}
+
+#clearSelBtn{
+    background:#f1f4f7;
+}
+
+#addNoteBtn{
+    background:#2f5f9e;
+    color:#fff;
+    align-self:flex-start;
+}
+
+.note-handle.selected{
+    background:rgba(255,154,44,.7);
+    border-color:#a95407;
+    box-shadow:0 0 0 4px rgba(255,154,44,.25);
+}
+
+.note-handle.selected::after{
+    opacity:0;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="toolbar">
+
+        <nav class="feature-nav" id="featureNav" aria-label="功能导航"></nav>
+
+        <label class="file-btn">
+            📂 加载 MusicXML
+            <input
+                type="file"
+                id="fileInput"
+                accept=".xml,.musicxml,.mxl"
+            >
+        </label>
+
+        <button id="playBtn" disabled>
+            ▶ 播放
+        </button>
+
+        <button id="stopBtn" disabled>
+            ⏹ 停止
+        </button>
+
+        <div class="edit-tools">
+            <button id="editBtn" disabled title="在谱面上拖动音符，改变时值">
+                ✏️ 编辑音符
+            </button>
+
+            <label class="grid-label">
+                网格
+                <select id="gridSelect" title="拖动时的时值吸附网格">
+                    <option value="1">1 拍</option>
+                    <option value="0.5" selected>1/2 拍</option>
+                    <option value="0.25">1/4 拍</option>
+                    <option value="0.125">1/8 拍</option>
+                </select>
+            </label>
+
+            <button id="undoBtn" disabled title="撤销上一次时值修改">↶ 撤销</button>
+            <button id="saveBtn" disabled title="下载修改后的 MusicXML">💾 保存</button>
+            <button id="resetBtn" disabled title="还原到加载时的原始曲谱">↺ 还原</button>
+        </div>
+
+        <div class="tempo">
+            <span>速度</span>
+
+            <input
+                type="range"
+                id="tempoSlider"
+                min="25"
+                max="200"
+                value="100"
+            >
+
+            <span id="tempoText">100%</span>
+        </div>
+
+        <div class="volume">
+            <span>音量</span>
+
+            <input
+                type="range"
+                id="volumeSlider"
+                min="0"
+                max="100"
+                value="80"
+            >
+        </div>
+
+        <div class="instrument">
+            <span>乐器</span>
+
+            <select id="instrumentSelect" title="覆盖乐谱自带的乐器设置">
+                <option value="auto">跟随乐谱</option>
+            </select>
+        </div>
+
+        <div class="status" id="status">
+            🎼 等待加载乐谱
+        </div>
+
+    </div>
+
+    <div class="main-area">
+
+        <div id="scoreWrapper">
+
+            <div id="measureHighlight"></div>
+
+            <div id="scoreContainer">
+                <div style="padding:80px;text-align:center;color:#aaa;">
+                    请加载 MusicXML 文件
+                </div>
+            </div>
+
+        </div>
+
+        <aside id="sidePanel">
+
+            <div class="side-head">
+                <h2>谱面编辑</h2>
+                <p>
+                    点击谱面音符选择，左右拖动改变时值。
+                    选中后可以删除、上下移调、添加延音线或连音线；
+                    也可以向休止符位置添加新音符。和弦默认整组处理。
+                </p>
+            </div>
+
+            <div class="snippet-form">
+
+                <div class="edit-section-title">
+                    所选音符
+                    <span id="selectionCount">0 个</span>
+                </div>
+
+                <div class="selection-info" id="selectionInfo">
+                    尚未选择音符。编辑模式下点击谱面中的音符即可选择，Shift + 点击可多选。
+                </div>
+
+                <div class="chord-editor" id="chordEditor" hidden>
+                    <div class="chord-editor-title">
+                        和弦音：点击可只选中其中一个音
+                    </div>
+                    <div class="chord-chips" id="chordChips"></div>
+                </div>
+
+                <div class="edit-actions">
+                    <button id="deleteNoteBtn" disabled title="删除所选音符；和弦中只选中一个音时，只删除该音">🗑 删除</button>
+                    <button id="pitchUpBtn" disabled title="所选音符升高一个半音（会试听落点音高）">♯ 升半音</button>
+                    <button id="pitchDownBtn" disabled title="所选音符降低一个半音（会试听落点音高）">♭ 降半音</button>
+                    <button id="durDownBtn" disabled title="缩短所选音符的时值，并自动补上等长休止符">− 时值</button>
+                    <button id="durUpBtn" disabled title="加长所选音符的时值，自动占用后面的休止符或小节空白">＋ 时值</button>
+                    <button id="tieBtn" disabled title="为两个同音高且首尾相接的音符添加延音线">⌒ 延音线</button>
+                    <button id="slurBtn" disabled title="为所选两个音符添加连音线">⌒ 连音线</button>
+                    <button id="clearSelBtn" disabled>清除选择</button>
+                </div>
+
+                <div class="snippet-hint" id="editStatus">
+                    拖动音符左右移动 = 修改时值；↑/↓ = 移调半音；Delete = 删除；− / + = 缩短 / 加长时值。
+                </div>
+
+            </div>
+
+            <div class="snippet-form">
+
+                <div class="edit-section-title">添加音符</div>
+
+                <label>
+                    <span>声部</span>
+                    <select id="addPartSelect" disabled></select>
+                </label>
+
+                <label>
+                    <span>谱表</span>
+                    <select id="addStaffSelect" disabled></select>
+                </label>
+
+                <label>
+                    <span>声部线</span>
+                    <select id="addVoiceSelect" disabled></select>
+                </label>
+
+                <div class="range-row">
+                    <label class="range-item">
+                        <span>小节</span>
+                        <input type="number" id="addMeasure" min="1" value="1" disabled>
+                    </label>
+
+                    <label class="range-item">
+                        <span>位置</span>
+                        <input type="number" id="addBeat" min="0" step="0.25" value="0" disabled>
+                    </label>
+                </div>
+
+                <label>
+                    <span>音高</span>
+                    <input type="text" id="addPitch" value="C4" placeholder="C4 / F#4 / Bb3" disabled>
+                </label>
+
+                <label>
+                    <span>时值</span>
+                    <select id="addDuration" disabled>
+                        <option value="4">全音符 (4 拍)</option>
+                        <option value="3">附点二分 (3 拍)</option>
+                        <option value="2">二分音符 (2 拍)</option>
+                        <option value="1.5">附点四分 (1.5 拍)</option>
+                        <option value="1" selected>四分音符 (1 拍)</option>
+                        <option value="0.75">附点八分 (0.75 拍)</option>
+                        <option value="0.5">八分音符 (0.5 拍)</option>
+                        <option value="0.375">附点十六分 (0.375 拍)</option>
+                        <option value="0.25">十六分音符 (0.25 拍)</option>
+                        <option value="0.1875">附点三十二分 (0.1875 拍)</option>
+                        <option value="0.125">三十二分音符 (0.125 拍)</option>
+                    </select>
+                </label>
+
+                <button id="addNoteBtn" disabled>＋ 添加到休止符位置</button>
+
+                <div class="snippet-hint" id="addStatus">
+                    位置以四分音符计算，0 = 小节开始。目标位置必须有足够长的休止符。
+                </div>
+
+            </div>
+
+            <div class="snippet-foot">
+                快捷键：Delete 删除 · ↑/↓ 移调半音 · Ctrl+Z 撤销<br>
+                延音线要求两个音符同音高且首尾相接；连音线可连接同一声部的两个音符。
+            </div>
+
+        </aside>
+
+    </div>
+
+    <footer>
+        OSMD + SpessaSynth（MuseScore General SF3）MusicXML 编辑器 ·
+        <a href="./play.html">功能首页</a> ·
+        <a href="./player.html">播放器</a> ·
+        <a href="./extract.html">歌眼抽取</a> ·
+        <a href="./new.html">新建曲谱</a>
+    </footer>
+
+</div>
+
+<script>
+/*
+    file:// 下 ES Module / AudioWorklet / fetch 都会被浏览器拦截，
+    所以这里先在普通脚本里给出提示。
+*/
+if (location.protocol === "file:") {
+
+    document.getElementById("status").innerHTML =
+        "⚠️ 请用本地服务器打开（见下方说明）";
+
+    document.getElementById("status").style.color = "#c0392b";
+
+    document.getElementById("scoreContainer").innerHTML =
+        '<div style="padding:60px;text-align:center;color:#666;line-height:1.9">' +
+        "这个播放器需要从本地服务器加载音色库。<br>" +
+        "在项目目录运行 <code>./start.sh</code>（或 <code>python3 -m http.server 8000</code>），<br>" +
+        "然后访问 <code>http://localhost:8000/edit.html</code>。" +
+        "</div>";
+}
+</script>
+
+<script src="./vendor/opensheetmusicdisplay.min.js"></script>
+
+<script type="importmap">
+{
+    "imports": {
+        "spessasynth_core": "./vendor/spessasynth_core.js",
+        "stb-vorbis": "./vendor/stb-vorbis.js"
+    }
+}
+</script>
+
+<script type="module">
+
+import { WorkletSynthesizer } from "./vendor/spessasynth_lib.js";
+import {
+    applyDurationToXmlNote,
+    buildMeasurePosMapFrom,
+    baseFileName,
+    childText,
+    chordGroupFor,
+    clamp,
+    collectVoiceEvents,
+    collectXmlNotes,
+    createRestNote,
+    directChild,
+    directChildren,
+    downloadXml,
+    durationLabel,
+    findGraphicXmlEntry,
+    formatQ,
+    graphicPartIndex,
+    hasDirectChild,
+    initFeatureNav,
+    maxDurationForEntry,
+    measureBoxInContainer,
+    measurePxPerQ,
+    midiPitchName,
+    midiToPitchParts,
+    notatedQuarterValues,
+    osmdPointToContainer,
+    parseMusicXML,
+    pitchToMidi,
+    serializeMusicXml,
+    setChildText,
+    snapNotatedDuration,
+    setEntryDuration,
+    sourceStructure,
+    updateNoteType,
+    xmlEscapeText
+} from "./js/musikoo-core.js?v=20261028b";
+
+/* =========================================================
+   DOM
+========================================================= */
+
+const fileInput        = document.getElementById("fileInput");
+const playBtn          = document.getElementById("playBtn");
+const stopBtn          = document.getElementById("stopBtn");
+const statusEl         = document.getElementById("status");
+const tempoSlider      = document.getElementById("tempoSlider");
+const tempoText        = document.getElementById("tempoText");
+const volumeSlider     = document.getElementById("volumeSlider");
+const instrumentSelect = document.getElementById("instrumentSelect");
+const scoreWrapper     = document.getElementById("scoreWrapper");
+const scoreContainer   = document.getElementById("scoreContainer");
+const measureHighlight = document.getElementById("measureHighlight");
+
+const editBtn          = document.getElementById("editBtn");
+const undoBtn          = document.getElementById("undoBtn");
+const saveBtn          = document.getElementById("saveBtn");
+const resetBtn         = document.getElementById("resetBtn");
+const gridSelect       = document.getElementById("gridSelect");
+
+const selectionCount     = document.getElementById("selectionCount");
+const selectionInfo      = document.getElementById("selectionInfo");
+const chordEditor        = document.getElementById("chordEditor");
+const chordChips         = document.getElementById("chordChips");
+const deleteNoteBtn      = document.getElementById("deleteNoteBtn");
+const pitchUpBtn         = document.getElementById("pitchUpBtn");
+const pitchDownBtn       = document.getElementById("pitchDownBtn");
+const durDownBtn         = document.getElementById("durDownBtn");
+const durUpBtn           = document.getElementById("durUpBtn");
+const tieBtn             = document.getElementById("tieBtn");
+const slurBtn            = document.getElementById("slurBtn");
+const clearSelBtn        = document.getElementById("clearSelBtn");
+const editStatus         = document.getElementById("editStatus");
+
+const addPartSelect      = document.getElementById("addPartSelect");
+const addStaffSelect     = document.getElementById("addStaffSelect");
+const addVoiceSelect     = document.getElementById("addVoiceSelect");
+const addMeasure         = document.getElementById("addMeasure");
+const addBeat            = document.getElementById("addBeat");
+const addPitch           = document.getElementById("addPitch");
+const addDuration        = document.getElementById("addDuration");
+const addNoteBtn         = document.getElementById("addNoteBtn");
+const addStatus          = document.getElementById("addStatus");
+
+/* =========================================================
+   状态
+========================================================= */
+
+const SOUNDFONT_URL = "./soundfonts/MuseScore_General.sf3";
+const SOUNDFONT_ID  = "musescore-general";
+
+let osmd = null;
+
+let audioCtx   = null;
+let synth      = null;
+let masterGain = null;
+let loudnessGain = null;
+let limiter    = null;
+
+let soundfontPromise = null;
+let soundfontReady   = false;
+
+let timeline     = [];
+let measureEvents = [];
+let scoreParts   = [];
+let totalSec     = 0;
+let parsedFileName = "";
+
+/* -------- 编辑状态 -------- */
+
+let sourceDoc      = null;   // 当前完整曲谱的 XML DOM（编辑以它为准）
+let originalXml    = "";     // 加载时的原始 XML，用于“还原”
+let loadedFileName = "";
+let editMode       = false;
+let dragGridQ      = 0.5;
+let undoStack      = [];
+let fullNoteModel  = null;
+let fullOverlayTimer = null;
+let measurePosMap  = [];
+let lastHighlightedMeasure = null;
+let sourcePartInfo   = [];
+let sourceMeasureCount = 0;
+
+/* 全谱编辑器：当前选中的音符（用 entry.key 持久化） */
+let selectedNoteKeys = new Set();
+
+/* 防止连续点击 / 连按快捷键时并发修改同一份 XML */
+let fullMutationBusy = false;
+
+/* 试听去重：新的试听会取消尚未开始的旧试听 */
+let previewToken = 0;
+
+let playbackId = 0;
+let isPlaying  = false;
+
+let timerIds = [];
+
+let schedulerTimer = null;
+let panicTimer     = null;
+
+/* 已经排进 worklet 队列的最晚时间，防止停止后立刻重播时旧事件漏出 */
+let scheduledUntil = 0;
+
+/* 新一次播放真正开始发声的时间，之前保持静音 */
+let audioGateUntil = 0;
+
+let targetVolume = 0.8;
+
+/*
+    SpessaSynth 会把带 time 的事件排进 worklet 内部队列，
+    stopAll() 不会清空这个队列。所以只提前调度一小段，
+    剩余事件由这里的小窗口调度器逐段喂给它。
+
+    主线程偶尔卡顿（GC、排版、切后台）时，150ms 的余量
+    很容易被吃光，事件就会挤在同一时刻。这里留 300ms 余量，
+    音频线程仍有足够时间按原定时间发声。
+*/
+const SCHEDULE_LOOKAHEAD = 0.3;
+
+/* MuseScore General 采样余量很大，需要一级固定增益（约 +26dB） */
+const LOUDNESS_GAIN = 20;
+
+let tempoMultiplier = 1.0;
+
+/* =========================================================
+   工具
+========================================================= */
+
+function setStatus(text, isError=false){
+
+    statusEl.innerHTML = text;
+    statusEl.style.color =
+        isError ? "#c0392b" : "#24436c";
+}
+
+function hideHighlight(){
+
+    if(!measureHighlight) return;
+
+    measureHighlight.style.display = "none";
+}
+
+/*
+    把 SVG 用户坐标换算成 #scoreWrapper 内容区坐标。
+    每次高亮时现算，窗口缩放后也不会错位。
+*/
+function measureScreenBox(pos){
+
+    const svg = scoreContainer.querySelector("svg");
+
+    if(!svg) return null;
+
+    const ctm = svg.getScreenCTM();
+    const wr  = scoreWrapper.getBoundingClientRect();
+
+    const scaleX = Math.hypot(ctm.a, ctm.b);
+    const scaleY = Math.hypot(ctm.c, ctm.d);
+
+    return {
+        left:
+            ctm.a * pos.x + ctm.c * pos.y + ctm.e
+            - wr.left + scoreWrapper.scrollLeft,
+
+        top:
+            ctm.b * pos.x + ctm.d * pos.y + ctm.f
+            - wr.top + scoreWrapper.scrollTop,
+
+        width:  pos.w * scaleX,
+        height: pos.h * scaleY
+    };
+}
+
+/*
+    高亮当前播放的小节（浅粉色背景）
+*/
+function highlightMeasure(measureIndex){
+
+    const pos = measurePosMap[measureIndex];
+
+    if(!pos || !measureHighlight) return;
+
+    const box = measureScreenBox(pos);
+
+    if(!box) return;
+
+    lastHighlightedMeasure = measureIndex;
+
+    measureHighlight.style.display = "block";
+
+    measureHighlight.style.left   = (box.left - 3) + "px";
+    measureHighlight.style.top    = (box.top - 5) + "px";
+    measureHighlight.style.width  = (box.width + 6) + "px";
+    measureHighlight.style.height = (box.height + 10) + "px";
+
+    keepMeasureInView();
+}
+
+/*
+    当前小节超出可视区域时自动滚动：
+    竖直方向把当前小节顶到第一行，水平方向做最小移动。
+*/
+function keepMeasureInView(){
+
+    if(!measureHighlight) return;
+
+    const hr = measureHighlight.getBoundingClientRect();
+    const wr = scoreWrapper.getBoundingClientRect();
+
+    const pad = 28;
+
+    const visTop    = wr.top + pad;
+    const visBottom = wr.bottom - pad;
+    const visLeft   = wr.left + pad;
+    const visRight  = wr.right - pad;
+
+    let top  = scoreWrapper.scrollTop;
+    let left = scoreWrapper.scrollLeft;
+
+    if(hr.bottom > visBottom || hr.top < visTop){
+
+        top = Math.max(
+            0,
+            scoreWrapper.scrollTop + (hr.top - visTop)
+        );
+    }
+
+    if(hr.left < visLeft){
+
+        left = Math.max(
+            0,
+            scoreWrapper.scrollLeft + (hr.left - visLeft)
+        );
+    }
+    else if(hr.right > visRight){
+
+        left =
+            scoreWrapper.scrollLeft
+            + (hr.right - visRight);
+    }
+
+    if(
+        Math.abs(top - scoreWrapper.scrollTop) > 1 ||
+        Math.abs(left - scoreWrapper.scrollLeft) > 1
+    ){
+
+        scoreWrapper.scrollTo({
+            top,
+            left,
+            behavior:"smooth"
+        });
+    }
+}
+
+/* =========================================================
+   音色库 / 合成器
+========================================================= */
+
+async function ensureAudio(){
+
+    if(!audioCtx){
+
+        audioCtx = new AudioContext({ latencyHint:"playback" });
+
+        /*
+            音量链路：
+            synth → 固定增益 → 限幅器 → 用户音量 → 扬声器
+        */
+
+        loudnessGain = audioCtx.createGain();
+        loudnessGain.gain.value = LOUDNESS_GAIN;
+
+        limiter = audioCtx.createDynamicsCompressor();
+        limiter.threshold.value = -6;
+        limiter.knee.value      = 2;
+        limiter.ratio.value     = 12;
+        limiter.attack.value    = 0.004;
+        limiter.release.value   = 0.25;
+
+        masterGain = audioCtx.createGain();
+        targetVolume = volumeSlider.value / 100;
+        masterGain.gain.value = targetVolume;
+
+        loudnessGain.connect(limiter);
+        limiter.connect(masterGain);
+        masterGain.connect(audioCtx.destination);
+
+        // 合成器跑在 AudioWorklet 里，processor 必须和页面同源
+        await audioCtx.audioWorklet.addModule(
+            "./vendor/spessasynth_processor.min.js"
+        );
+
+        // 默认 17 个输出（主输出 + 16 通道），只把主输出接到扬声器
+        synth = new WorkletSynthesizer(audioCtx);
+
+        synth.connect(loudnessGain);
+    }
+
+    if(audioCtx.state !== "running"){
+        await audioCtx.resume();
+    }
+
+    return audioCtx;
+}
+
+async function ensureSoundfont(){
+
+    await ensureAudio();
+
+    if(soundfontReady) return;
+
+    if(!soundfontPromise){
+
+        soundfontPromise = (async () => {
+
+            setStatus("🎹 正在加载音色库（约 40MB，仅第一次）… 0%");
+
+            const res = await fetch(SOUNDFONT_URL);
+
+            if(!res.ok){
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const total =
+                Number(res.headers.get("content-length")) || 0;
+
+            const reader = res.body?.getReader?.();
+
+            let buffer;
+
+            if(reader){
+
+                const chunks = [];
+                let received = 0;
+                let lastPct  = -1;
+
+                while(true){
+
+                    const { done, value } =
+                        await reader.read();
+
+                    if(done) break;
+
+                    chunks.push(value);
+                    received += value.length;
+
+                    if(total){
+
+                        const pct =
+                            Math.min(100, Math.floor(received / total * 100));
+
+                        if(pct !== lastPct){
+
+                            lastPct = pct;
+
+                            setStatus(
+                                `🎹 正在加载音色库… ${pct}%`
+                            );
+                        }
+                    }
+                }
+
+                buffer = await new Blob(chunks).arrayBuffer();
+
+            }else{
+
+                buffer = await res.arrayBuffer();
+            }
+
+            await synth.soundBankManager.addSoundBank(
+                buffer,
+                SOUNDFONT_ID
+            );
+
+            soundfontReady = true;
+
+        })();
+    }
+
+    try{
+
+        await soundfontPromise;
+
+    }catch(e){
+
+        soundfontPromise = null;
+        throw e;
+    }
+}
+
+/* =========================================================
+   General MIDI 乐器名
+========================================================= */
+
+const GM_NAMES = [
+    "Acoustic Grand Piano","Bright Acoustic Piano","Electric Grand Piano","Honky-tonk Piano",
+    "Electric Piano 1","Electric Piano 2","Harpsichord","Clavinet",
+    "Celesta","Glockenspiel","Music Box","Vibraphone",
+    "Marimba","Xylophone","Tubular Bells","Dulcimer",
+    "Drawbar Organ","Percussive Organ","Rock Organ","Church Organ",
+    "Reed Organ","Accordion","Harmonica","Tango Accordion",
+    "Acoustic Guitar (nylon)","Acoustic Guitar (steel)","Electric Guitar (jazz)","Electric Guitar (clean)",
+    "Electric Guitar (muted)","Overdriven Guitar","Distortion Guitar","Guitar Harmonics",
+    "Acoustic Bass","Electric Bass (finger)","Electric Bass (pick)","Fretless Bass",
+    "Slap Bass 1","Slap Bass 2","Synth Bass 1","Synth Bass 2",
+    "Violin","Viola","Cello","Contrabass",
+    "Tremolo Strings","Pizzicato Strings","Orchestral Harp","Timpani",
+    "String Ensemble 1","String Ensemble 2","Synth Strings 1","Synth Strings 2",
+    "Choir Aahs","Voice Oohs","Synth Voice","Orchestra Hit",
+    "Trumpet","Trombone","Tuba","Muted Trumpet",
+    "French Horn","Brass Section","Synth Brass 1","Synth Brass 2",
+    "Soprano Sax","Alto Sax","Tenor Sax","Baritone Sax",
+    "Oboe","English Horn","Bassoon","Clarinet",
+    "Piccolo","Flute","Recorder","Pan Flute",
+    "Blown Bottle","Shakuhachi","Whistle","Ocarina",
+    "Lead 1 (square)","Lead 2 (sawtooth)","Lead 3 (calliope)","Lead 4 (chiff)",
+    "Lead 5 (charang)","Lead 6 (voice)","Lead 7 (fifths)","Lead 8 (bass + lead)",
+    "Pad 1 (new age)","Pad 2 (warm)","Pad 3 (polysynth)","Pad 4 (choir)",
+    "Pad 5 (bowed)","Pad 6 (metallic)","Pad 7 (halo)","Pad 8 (sweep)",
+    "FX 1 (rain)","FX 2 (soundtrack)","FX 3 (crystal)","FX 4 (atmosphere)",
+    "FX 5 (brightness)","FX 6 (goblins)","FX 7 (echoes)","FX 8 (sci-fi)",
+    "Sitar","Banjo","Shamisen","Koto",
+    "Kalimba","Bag pipe","Fiddle","Shanai",
+    "Tinkle Bell","Agogo","Steel Drums","Woodblock",
+    "Taiko Drum","Melodic Tom","Synth Drum","Reverse Cymbal",
+    "Guitar Fret Noise","Breath Noise","Seashore","Bird Tweet",
+    "Telephone Ring","Helicopter","Applause","Gunshot"
+];
+
+GM_NAMES.forEach((name, program) => {
+
+    const opt = document.createElement("option");
+
+    opt.value = String(program);
+    opt.textContent = `${program + 1}. ${name}`;
+
+    instrumentSelect.appendChild(opt);
+});
+
+/*
+    part-name 里没有 midi-program 时，靠名字猜一个乐器
+*/
+const NAME_HINTS = [
+    [/grand\s*piano|piano|钢琴/i, 0],
+    [/e\.?\s*piano|electric\s*piano|电钢琴/i, 4],
+    [/harpsichord|大键琴|羽管键琴/i, 6],
+    [/organ|风琴|管风琴/i, 19],
+    [/guitar|吉他/i, 25],
+    [/bass|贝斯|低音提琴?/i, 32],
+    [/violin|小提琴/i, 40],
+    [/viola|中提琴/i, 41],
+    [/cello|大提琴/i, 42],
+    [/contrabass|double\s*bass|低音提琴/i, 43],
+    [/strings?|弦乐/i, 48],
+    [/choir|voices?|合唱/i, 52],
+    [/trumpet|小号/i, 56],
+    [/trombone|长号/i, 57],
+    [/tuba|大号/i, 58],
+    [/horn|圆号/i, 60],
+    [/sax|萨克斯/i, 65],
+    [/oboe|双簧管/i, 68],
+    [/bassoon|巴松|大管/i, 70],
+    [/clarinet|单簧管/i, 71],
+    [/flute|长笛/i, 73],
+    [/piccolo|短笛/i, 72],
+    [/timpani|定音鼓/i, 47],
+    [/harp|竖琴/i, 46],
+    [/marimba|马林巴/i, 12],
+    [/vibraphone|颤音琴/i, 11],
+    [/sitar|西塔琴/i, 104]
+];
+
+/* =========================================================
+   MusicXML 解析
+========================================================= */
+
+const STEP_SEMITONE = {
+    C:0, D:2, E:4, F:5, G:7, A:9, B:11
+};
+
+const DYNAMIC_VELOCITY = {
+    pppp:8, ppp:16, pp:24, p:33, mp:49,
+    mf:64, f:80, ff:96, fff:112, ffff:126
+};
+
+/* =========================================================
+   MusicXML 编辑模型
+========================================================= */
+
+/*
+    拖动只落在“单个音符能够记谱”的时值上：
+    2.5 拍之类需要连线拆分的长度不在表里，否则会出现
+    duration=2.5、type=half 这种谱面与时值不一致的节点。
+*/
+/*
+    修改音符时值后，重新整理小节里的时间游标。
+    音符时值在原位置改变后，同一 XML 声部里后面的音符会自然
+    向前/向后移动；这里只需要修正 <backup> 的时长，并把声部
+    末尾剩余的时间用不可见的 <forward> 补齐。
+*/
+/*
+    从和弦组最后一个 note 往后看：
+    - 连续的休止符 / forward 可以当作“可占用的空白”
+    - 遇到下一个有音高的音符、装饰音或 backup 就停止
+    - 如果到达小节末尾（或 voice 结束），剩余小节时间也算可用空白
+*/
+/* 加长时占用后面的休止符 / forward / 小节尾部空白，返回实际占用量 */
+/* 缩短时在音符后面补等长休止符，保证后续音符位置不变 */
+/*
+    修改一个音符（和弦按整组）的时值，同时保持同声部后续音符的绝对位置：
+    - 加长：占用后面的休止符 / forward / 小节尾部空白
+    - 缩短：立刻在音符后补等长休止符
+*/
+function attachDurationDrag(handle, entry, opts){
+
+    handle.addEventListener("pointerdown", ev => {
+
+        if(ev.button !== 0) return;
+
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        if(opts.onSelect){
+            opts.onSelect(entry, ev);
+        }
+
+        if(isPlaying) stopPlayback();
+
+        const startX = ev.clientX;
+        const oldQ = entry.durQ;
+        const grid = Math.max(0.03125, opts.getGrid());
+        const pxPerQ = Math.max(8, opts.getPxPerQ(entry));
+
+        const minQ = Math.min(grid, oldQ);
+
+        const maxQ = Math.max(
+            oldQ,
+            opts.getMaxQ ? opts.getMaxQ(entry) : entry.maxDurQ
+        );
+
+        const centerX = parseFloat(handle.style.left) || 0;
+        const centerY = parseFloat(handle.style.top) || 0;
+
+        const layer = handle.parentElement;
+
+        const ghost = document.createElement("div");
+        ghost.className = "drag-ghost";
+        ghost.style.left = centerX + "px";
+        ghost.style.top = (centerY - 2.5) + "px";
+        ghost.style.width = Math.max(2, oldQ * pxPerQ) + "px";
+
+        const label = document.createElement("div");
+        label.className = "drag-label";
+        label.innerHTML =
+            durationLabel(oldQ) +
+            '<small>↔ 拖动</small>';
+
+        layer.appendChild(ghost);
+        layer.appendChild(label);
+
+        handle.classList.add("dragging");
+
+        const prevUserSelect = document.body.style.userSelect;
+        document.body.style.userSelect = "none";
+
+        let newQ = oldQ;
+        let moved = false;
+        let finished = false;
+
+        const paint = () => {
+
+            const width = Math.max(2, newQ * pxPerQ);
+
+            ghost.style.width = width + "px";
+
+            const layerWidth = layer.clientWidth || 0;
+            const labelX = Math.min(
+                Math.max(centerX + width, 60),
+                Math.max(60, layerWidth - 10)
+            );
+
+            label.style.left = labelX + "px";
+            label.style.top = (centerY - 10) + "px";
+
+            label.innerHTML =
+                durationLabel(newQ) +
+                `<small>${newQ > oldQ ? "加长" : "缩短"}</small>`;
+        };
+
+        const onMove = e => {
+
+            if(finished) return;
+
+            if(e.cancelable) e.preventDefault();
+
+            const dx = e.clientX - startX;
+
+            if(Math.abs(dx) >= 2) moved = true;
+
+            let q = oldQ + dx / pxPerQ;
+
+            q = Math.round(q / grid) * grid;
+
+            if(q > maxQ){
+                q = Math.floor(maxQ / grid + 1e-6) * grid;
+            }
+
+            q = Math.max(minQ, q);
+
+            newQ = snapNotatedDuration(
+                Math.min(maxQ, Math.max(minQ, q)),
+                minQ,
+                maxQ,
+                grid,
+                oldQ
+            );
+
+            newQ = Number(newQ.toFixed(4));
+
+            paint();
+        };
+
+        const cleanup = () => {
+
+            if(finished) return;
+            finished = true;
+
+            window.removeEventListener("pointermove", onMove, true);
+            window.removeEventListener("pointerup", onUp, true);
+            window.removeEventListener("pointercancel", onCancel, true);
+
+            handle.classList.remove("dragging");
+
+            ghost.remove();
+            label.remove();
+
+            document.body.style.userSelect = prevUserSelect;
+
+            try{
+                if(handle.hasPointerCapture?.(ev.pointerId)){
+                    handle.releasePointerCapture(ev.pointerId);
+                }
+            }catch(e){}
+        };
+
+        const onUp = e => {
+
+            if(finished) return;
+
+            cleanup();
+
+            if(
+                !moved ||
+                Math.abs(newQ - oldQ) < 1e-5
+            ){
+                return;
+            }
+
+            opts.onApply(entry, newQ);
+        };
+
+        const onCancel = () => cleanup();
+
+        try{
+            handle.setPointerCapture?.(ev.pointerId);
+        }catch(e){}
+
+        window.addEventListener("pointermove", onMove, true);
+        window.addEventListener("pointerup", onUp, true);
+        window.addEventListener("pointercancel", onCancel, true);
+
+        paint();
+    });
+}
+
+function createNoteEditLayer(container, osmdInstance, model, opts){
+
+    container.querySelectorAll(".note-edit-layer")
+        .forEach(el => el.remove());
+
+    if(!osmdInstance || !model) return null;
+
+    model.entries.forEach(e => e._used = false);
+
+    const layer = document.createElement("div");
+    layer.className = "note-edit-layer";
+
+    const ml = osmdInstance.GraphicSheet?.MeasureList || [];
+
+    for(let mi = 0; mi < ml.length; mi++){
+
+        const staffMeasures = ml[mi];
+
+        if(!staffMeasures) continue;
+
+        for(let staffIdx = 0; staffIdx < staffMeasures.length; staffIdx++){
+
+            const sm = staffMeasures[staffIdx];
+            if(!sm) continue;
+
+            const instrument = sm.ParentStaff?.ParentInstrument;
+
+            const partIndex = graphicPartIndex(
+                osmdInstance,
+                instrument,
+                opts.fallbackPartIndex ?? 0
+            );
+
+            const staffNum = String(sm.ParentStaff?.Id || staffIdx + 1);
+
+            const staffEntries = sm.staffEntries || [];
+
+            staffEntries.forEach(se => {
+
+                const voiceEntries = se.graphicalVoiceEntries || [];
+
+                voiceEntries.forEach(gve => {
+
+                    const notes = gve.notes || [];
+
+                    notes.forEach(note => {
+
+                        const sn = note.sourceNote;
+
+                        if(!sn) return;
+                        if(sn.IsGraceNote) return;
+                        if(sn.isRestFlag) return;
+                        if(!sn.Pitch) return;
+
+                        const noteMi =
+                            sn.SourceMeasure?.measureListIndex ?? mi;
+
+                        const voice = String(
+                            sn.ParentVoiceEntry?.ParentVoice?.VoiceId ??
+                            sn.ParentVoice?.VoiceId ??
+                            1
+                        );
+
+                        const q =
+                            (sn.ParentVoiceEntry?.Timestamp?.RealValue ?? 0) * 4;
+
+                        const graphic = {
+                            mi: noteMi,
+                            partIndex,
+                            staff: staffNum,
+                            voice,
+                            // OSMD 的 halfTone 以“八度 0 = C-1”计，
+                            // 与 MIDI 的 C0=12 相差一个八度。
+                            midi: clamp((sn.halfTone ?? 0) + 12, 0, 127),
+                            q
+                        };
+
+                        const entry = findGraphicXmlEntry(model, graphic);
+
+                        if(!entry) return;
+                        if(opts.filter && !opts.filter(entry)) return;
+
+                        const ap = note.PositionAndShape?.AbsolutePosition;
+                        if(!ap) return;
+
+                        const pt = osmdPointToContainer(
+                            osmdInstance,
+                            container,
+                            ap.x * 10,
+                            ap.y * 10
+                        );
+
+                        if(!pt) return;
+
+                        const handle = document.createElement("div");
+                        handle.className = "note-handle";
+                        handle.style.left = pt.x + "px";
+                        handle.style.top = pt.y + "px";
+
+                        handle.dataset.voice  = entry.voice;
+                        handle.dataset.mi     = String(entry.mi);
+                        handle.dataset.startQ = formatQ(entry.startQ);
+                        handle.dataset.midi   = String(entry.midi);
+                        handle.dataset.chord  =
+                            String(chordGroupFor(entry.noteEl).length);
+                        handle.dataset.noteKey = entry.key;
+
+                        if(selectedNoteKeys.has(entry.key)){
+                            handle.classList.add("selected");
+                        }
+
+                        handle.title =
+                            `声部 ${entry.voice} · ${durationLabel(entry.durQ)}` +
+                            "（点击选择，左右拖动修改时值）";
+
+                        attachDurationDrag(handle, entry, opts);
+
+                        layer.appendChild(handle);
+                    });
+                });
+            });
+        }
+    }
+
+    container.appendChild(layer);
+
+    return layer;
+}
+
+function updateEditButtons(){
+
+    editBtn.disabled = !sourceDoc;
+    saveBtn.disabled = !sourceDoc;
+    resetBtn.disabled = !sourceDoc;
+
+    undoBtn.disabled = undoStack.length === 0;
+
+    editBtn.classList.toggle("active", editMode);
+    editBtn.textContent = editMode ? "✏️ 编辑中" : "✏️ 编辑音符";
+
+    const addReady = !!sourceDoc;
+
+    addNoteBtn.disabled = !addReady;
+    addPartSelect.disabled = !addReady;
+    addMeasure.disabled = !addReady;
+    addBeat.disabled = !addReady;
+    addPitch.disabled = !addReady;
+    addDuration.disabled = !addReady;
+
+    if(!addReady){
+        addStaffSelect.disabled = true;
+        addVoiceSelect.disabled = true;
+    }
+
+    updateSelectionUI();
+}
+
+/* =========================================================
+   全谱编辑：选择 / 删除 / 移调 / 连音线
+========================================================= */
+
+function currentSelectedEntries(){
+
+    if(!fullNoteModel) return [];
+
+    return fullNoteModel.entries.filter(e =>
+        selectedNoteKeys.has(e.key)
+    );
+}
+
+function selectFullNote(entry, ev){
+
+    if(!fullNoteModel) return;
+
+    const additive =
+        ev.shiftKey || ev.ctrlKey || ev.metaKey;
+
+    if(additive){
+
+        if(selectedNoteKeys.has(entry.key)){
+            selectedNoteKeys.delete(entry.key);
+        }else{
+            selectedNoteKeys.add(entry.key);
+        }
+    }
+    else{
+
+        selectedNoteKeys.clear();
+        selectedNoteKeys.add(entry.key);
+    }
+
+    syncSelectionClasses();
+    updateSelectionUI();
+}
+
+function syncSelectionClasses(){
+
+    scoreContainer
+        .querySelectorAll(".note-handle[data-note-key]")
+        .forEach(handle => {
+
+            handle.classList.toggle(
+                "selected",
+                selectedNoteKeys.has(handle.dataset.noteKey)
+            );
+        });
+}
+
+function clearFullSelection(){
+
+    selectedNoteKeys.clear();
+
+    syncSelectionClasses();
+    updateSelectionUI();
+}
+
+function updateSelectionUI(){
+
+    if(!selectionCount) return;
+
+    const entries = currentSelectedEntries();
+
+    selectionCount.textContent = `${entries.length} 个`;
+
+    deleteNoteBtn.disabled = entries.length === 0;
+    pitchUpBtn.disabled = entries.length === 0;
+    pitchDownBtn.disabled = entries.length === 0;
+    durDownBtn.disabled = entries.length === 0;
+    durUpBtn.disabled = entries.length === 0;
+    tieBtn.disabled = entries.length !== 2;
+    slurBtn.disabled = entries.length !== 2;
+    clearSelBtn.disabled = entries.length === 0;
+
+    if(!entries.length){
+        selectionInfo.textContent =
+            "尚未选择音符。编辑模式下点击谱面中的音符即可选择，Shift + 点击可多选。";
+
+        chordEditor.hidden = true;
+        chordChips.innerHTML = "";
+        return;
+    }
+
+    const measures = [...new Set(entries.map(e => e.mi + 1))]
+        .sort((a, b) => a - b);
+
+    const voices = [...new Set(
+        entries.map(e => `${e.partIndex + 1}/${e.staff}/${e.voice}`)
+    )];
+
+    const pitches = [...new Set(entries.map(e => midiPitchName(e.midi)))];
+
+    const durations = [...new Set(entries.map(e => formatQ(e.durQ)))];
+
+    const measureText =
+        measures.length === 1
+            ? `第 ${measures[0]} 小节`
+            : `第 ${measures[0]}–${measures[measures.length - 1]} 小节`;
+
+    selectionInfo.textContent =
+        `${entries.length} 个音符 · ${measureText} · ` +
+        `声部 ${voices.join("、")} · 音高 ${pitches.join("、")} · ` +
+        `时值 ${durations.join("、")}`;
+
+    renderChordChips(entries);
+}
+
+function entryForNoteEl(noteEl){
+
+    if(!fullNoteModel) return null;
+
+    return fullNoteModel.entries.find(e => e.noteEl === noteEl) || null;
+}
+
+function renderChordChips(entries){
+
+    const groups = [];
+
+    entries.forEach(entry => {
+
+        const group = chordGroupFor(entry.noteEl);
+
+        if(group.length < 2) return;
+
+        if(groups.some(g => g[0] === group[0])) return;
+
+        groups.push(group);
+    });
+
+    if(!groups.length){
+        chordEditor.hidden = true;
+        chordChips.innerHTML = "";
+        return;
+    }
+
+    chordEditor.hidden = false;
+    chordChips.innerHTML = "";
+
+    groups.forEach(group => {
+
+        const groupEntry = entryForNoteEl(group[0]);
+
+        if(groups.length > 1 && groupEntry){
+
+            const label = document.createElement("span");
+            label.className = "chord-group-label";
+            label.textContent =
+                `第 ${groupEntry.mi + 1} 小节 · ` +
+                `声部 ${groupEntry.partIndex + 1}/${groupEntry.staff}/${groupEntry.voice}`;
+
+            chordChips.appendChild(label);
+        }
+
+        group.forEach(noteEl => {
+
+            const entry = entryForNoteEl(noteEl);
+            if(!entry) return;
+
+            const chip = document.createElement("button");
+
+            chip.type = "button";
+            chip.className =
+                "chord-chip" +
+                (selectedNoteKeys.has(entry.key) ? " active" : "");
+
+            chip.textContent = midiPitchName(entry.midi);
+            chip.title =
+                `第 ${entry.mi + 1} 小节 · ` +
+                `声部 ${entry.partIndex + 1}/${entry.staff}/${entry.voice}` +
+                "（点击只选此音，Shift/Ctrl + 点击可多选）";
+
+            chip.addEventListener("click", ev => {
+
+                if(ev.shiftKey || ev.ctrlKey || ev.metaKey){
+
+                    if(selectedNoteKeys.has(entry.key)){
+                        selectedNoteKeys.delete(entry.key);
+                    }else{
+                        selectedNoteKeys.add(entry.key);
+                    }
+                }
+                else{
+                    selectedNoteKeys.clear();
+                    selectedNoteKeys.add(entry.key);
+                }
+
+                syncSelectionClasses();
+                updateSelectionUI();
+            });
+
+            chordChips.appendChild(chip);
+        });
+    });
+}
+
+/* =========================================================
+   全谱编辑：音高 / 删除 / 连音线
+========================================================= */
+
+function setNotePitchMidi(noteEl, midi){
+
+    const doc = noteEl.ownerDocument;
+    const { step, alter, octave } = midiToPitchParts(
+        clamp(Math.round(midi), 0, 127)
+    );
+
+    const pitch = doc.createElement("pitch");
+
+    const stepEl = doc.createElement("step");
+    stepEl.textContent = step;
+    pitch.appendChild(stepEl);
+
+    if(alter){
+        const alterEl = doc.createElement("alter");
+        alterEl.textContent = String(alter);
+        pitch.appendChild(alterEl);
+    }
+
+    const octaveEl = doc.createElement("octave");
+    octaveEl.textContent = String(octave);
+    pitch.appendChild(octaveEl);
+
+    const oldPitch = directChild(noteEl, "pitch");
+
+    if(oldPitch){
+        oldPitch.replaceWith(pitch);
+        return;
+    }
+
+    const durationEl = directChild(noteEl, "duration");
+    const anchor =
+        durationEl ||
+        directChild(noteEl, "voice") ||
+        directChild(noteEl, "type");
+
+    if(anchor){
+        noteEl.insertBefore(pitch, anchor);
+    }else{
+        noteEl.appendChild(pitch);
+    }
+}
+
+async function mutateFullScore(apply, successText, onError, keepEls=null){
+
+    if(!sourceDoc || fullMutationBusy) return false;
+
+    fullMutationBusy = true;
+
+    const backup = sourceDoc.cloneNode(true);
+    const keep = keepEls ? new Set(keepEls) : null;
+
+    pushFullUndo();
+
+    try{
+
+        apply();
+
+        await refreshFullScore();
+
+        if(keep && fullNoteModel){
+
+            selectedNoteKeys.clear();
+
+            fullNoteModel.entries.forEach(entry => {
+
+                if(keep.has(entry.noteEl)){
+                    selectedNoteKeys.add(entry.key);
+                }
+            });
+
+            syncSelectionClasses();
+            updateSelectionUI();
+        }
+        else{
+            clearFullSelection();
+        }
+
+        updateEditButtons();
+
+        setStatus(successText);
+
+        return true;
+
+    }catch(e){
+
+        console.error(e);
+
+        undoStack.pop();
+
+        /* 回滚到修改前的 XML，避免留下半成品 */
+        sourceDoc = backup;
+        buildSourceStructure(sourceDoc);
+
+        clearFullSelection();
+
+        try{
+            await refreshFullScore();
+        }catch(refreshError){
+            console.error(refreshError);
+        }
+
+        updateEditButtons();
+
+        setStatus("❌ 修改失败：" + e.message, true);
+
+        if(onError) onError(e);
+
+        return false;
+
+    }finally{
+
+        fullMutationBusy = false;
+    }
+}
+
+function deleteSelectedNotes(){
+
+    const entries = currentSelectedEntries();
+
+    if(!entries.length) return;
+
+    const selectedEls = new Set(entries.map(e => e.noteEl));
+
+    const groups = [];
+
+    entries.forEach(entry => {
+
+        const group = chordGroupFor(entry.noteEl);
+        const lead = group[0];
+
+        if(groups.some(g => g.group[0] === lead)) return;
+
+        groups.push({ group, divisions: entry.divisions || 1 });
+    });
+
+    const restCount = groups.filter(({ group }) =>
+        group.every(noteEl => selectedEls.has(noteEl))
+    ).length;
+
+    mutateFullScore(() => {
+
+        groups.forEach(({ group, divisions }) => {
+
+            const selectedInGroup =
+                group.filter(noteEl => selectedEls.has(noteEl));
+
+            if(!selectedInGroup.length) return;
+
+            /* 整组都被选中：换成一个等长休止符 */
+            if(selectedInGroup.length === group.length){
+
+                const lead = group[0];
+                const ticks =
+                    parseInt(directChild(lead, "duration")?.textContent, 10) || 0;
+
+                if(ticks > 0){
+
+                    const rest = createRestNote(
+                        lead,
+                        ticks,
+                        ticks / Math.max(1, divisions)
+                    );
+
+                    lead.parentElement.insertBefore(rest, lead);
+                }
+
+                group.forEach(noteEl => noteEl.remove());
+                return;
+            }
+
+            /* 只删除和弦中的部分音：保持和弦结构 */
+            const lead = group[0];
+            const leadRemoved = selectedEls.has(lead);
+
+            selectedInGroup.forEach(noteEl => noteEl.remove());
+
+            if(leadRemoved){
+
+                const remaining =
+                    group.filter(noteEl => !selectedEls.has(noteEl));
+
+                /* 原来的第一个音被删掉后，让下一个和弦音成为主音 */
+                if(remaining.length){
+                    directChild(remaining[0], "chord")?.remove();
+                }
+            }
+        });
+
+    }, `🗑 已删除 ${entries.length} 个音符` +
+       (restCount ? `，${restCount} 处补为休止符` : ""));
+}
+
+async function transposeSelectedNotes(delta){
+
+    const entries = currentSelectedEntries();
+
+    if(!entries.length) return;
+
+    const keepEls = entries.map(e => e.noteEl);
+    const previewItems = [];
+
+    entries.forEach(entry => {
+
+        const pitchEl = directChild(entry.noteEl, "pitch");
+
+        if(!pitchEl) return;
+
+        previewItems.push({
+            partIndex: entry.partIndex,
+            midi: clamp(pitchToMidi(pitchEl) + delta, 0, 127)
+        });
+    });
+
+    const ok = await mutateFullScore(() => {
+
+        entries.forEach(entry => {
+
+            const pitchEl = directChild(entry.noteEl, "pitch");
+
+            if(!pitchEl) return;
+
+            const midi = pitchToMidi(pitchEl);
+
+            setNotePitchMidi(entry.noteEl, midi + delta);
+
+            /* 临时记号由新音高重新推导，避免显示错误的升降号 */
+            directChild(entry.noteEl, "accidental")?.remove();
+        });
+
+    }, `${delta > 0 ? "♯ 已升高" : "♭ 已降低"} ${entries.length} 个音符`,
+       null,
+       keepEls);
+
+    if(ok && previewItems.length){
+        previewPitches(previewItems);
+    }
+}
+
+/* =========================================================
+   全谱编辑：时值增减
+========================================================= */
+
+function nextDurationPlan(entry, direction){
+
+    const values = notatedQuarterValues(entry.divisions || 1);
+    const currentQ = entry.durQ;
+
+    if(direction > 0){
+
+        const target = values.find(q => q > currentQ + 1e-6);
+
+        if(target == null){
+            return { target:null, reason:"已经不能再加长" };
+        }
+
+        const maxQ = maxDurationForEntry(entry);
+
+        if(target > maxQ + 1e-6){
+            return {
+                target:null,
+                reason:
+                    `后面的音符挡住了，最多还能加长 ` +
+                    `${formatQ(Math.max(0, maxQ - currentQ))} 拍`
+            };
+        }
+
+        return { target };
+    }
+
+    const below = values.filter(q => q < currentQ - 1e-6);
+
+    if(!below.length){
+        return { target:null, reason:"已经不能再缩短" };
+    }
+
+    return { target: below[below.length - 1] };
+}
+
+async function changeSelectedDurations(direction){
+
+    const entries = currentSelectedEntries();
+
+    if(!entries.length) return;
+
+    const leads = [];
+
+    entries.forEach(entry => {
+
+        const lead = chordGroupFor(entry.noteEl)[0];
+
+        if(!leads.includes(lead)) leads.push(lead);
+    });
+
+    const plans = [];
+    const problems = [];
+
+    leads.forEach(lead => {
+
+        const entry = entryForNoteEl(lead);
+        if(!entry) return;
+
+        const plan = nextDurationPlan(entry, direction);
+
+        if(plan.target == null){
+            problems.push(plan.reason);
+            return;
+        }
+
+        plans.push({ noteEl: lead, target: plan.target });
+    });
+
+    if(!plans.length){
+
+        const reason = problems[0] || "没有可选时值";
+
+        editStatus.textContent = `无法修改时值：${reason}`;
+        editStatus.classList.add("error");
+        setStatus(`❌ 无法修改时值：${reason}`, true);
+        return;
+    }
+
+    let partial = 0;
+
+    const ok = await mutateFullScore(() => {
+
+        plans.forEach(plan => {
+
+            const model = collectXmlNotes(sourceDoc);
+            const entry = model.entries.find(e => e.noteEl === plan.noteEl);
+
+            if(!entry) return;
+
+            const before = entry.durQ;
+            const actual = setEntryDuration(entry, plan.target);
+
+            if(Math.abs(actual - plan.target) > 1e-6){
+                partial++;
+            }
+
+            if(Math.abs(actual - before) < 1e-6){
+                partial++;
+            }
+        });
+
+    }, `⏱ 已${direction > 0 ? "加长" : "缩短"} ${plans.length} 个音符`,
+       e => {
+           editStatus.textContent = "修改时值失败：" + e.message;
+           editStatus.classList.add("error");
+       },
+       leads);
+
+    if(ok){
+
+        const suffix =
+            problems.length
+                ? `，${problems.length} 个没有足够空间`
+                : "";
+
+        const text =
+            `⏱ 已${direction > 0 ? "加长" : "缩短"} ` +
+            `${plans.length} 个音符${suffix}`;
+
+        setStatus(text);
+
+        editStatus.textContent = text;
+        editStatus.classList.toggle("error", problems.length > 0);
+    }
+}
+
+/* =========================================================
+   试听：只发出短促的落点音高
+========================================================= */
+
+async function previewPitches(items){
+
+    if(!items.length || isPlaying) return;
+
+    const token = ++previewToken;
+    const previousStatus = statusEl.textContent;
+    const wasLoading = !soundfontReady;
+
+    try{
+
+        await ensureSoundfont();
+
+        if(token !== previewToken || isPlaying) return;
+
+        if(wasLoading && statusEl.textContent.startsWith("🎹 正在加载音色库")){
+            setStatus(previousStatus);
+        }
+
+        if(!synth || !audioCtx) return;
+
+        const now = audioCtx.currentTime + 0.02;
+
+        clearTimeout(panicTimer);
+        panicTimer = null;
+
+        try{
+            synth.stopAll(true);
+        }catch(e){}
+
+        if(masterGain){
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(targetVolume, now);
+        }
+
+        const programs = currentPrograms();
+        const byChannel = new Map();
+
+        items.forEach(({ partIndex, midi }) => {
+
+            const program = programs[partIndex] || programs[0];
+            if(!program) return;
+
+            if(!byChannel.has(program.channel)){
+                byChannel.set(program.channel, {
+                    program,
+                    midis: new Set()
+                });
+            }
+
+            byChannel.get(program.channel).midis.add(
+                clamp(Math.round(midi), 0, 127)
+            );
+        });
+
+        byChannel.forEach(({ program, midis }) => {
+
+            synth.programChange(program.channel, program.program, { time:now });
+            synth.controllerChange(program.channel, 7, program.volume, { time:now });
+            synth.controllerChange(program.channel, 64, 0, { time:now });
+
+            midis.forEach(midi => {
+                synth.noteOn(program.channel, midi, 100, { time:now });
+            });
+
+            const off = now + 0.55;
+
+            midis.forEach(midi => {
+                synth.noteOff(program.channel, midi, { time:off });
+            });
+        });
+
+    }catch(e){
+        console.warn("试听失败：", e);
+    }
+}
+
+function ensureNotations(noteEl){
+
+    let notations = directChild(noteEl, "notations");
+
+    if(notations) return notations;
+
+    notations = noteEl.ownerDocument.createElement("notations");
+
+    const lyric = directChild(noteEl, "lyric");
+
+    if(lyric){
+        noteEl.insertBefore(notations, lyric);
+    }else{
+        noteEl.appendChild(notations);
+    }
+
+    return notations;
+}
+
+function addNoteTie(noteEl, type){
+
+    const doc = noteEl.ownerDocument;
+
+    directChildren(noteEl, "tie")
+        .filter(el => el.getAttribute("type") === type)
+        .forEach(el => el.remove());
+
+    const tie = doc.createElement("tie");
+    tie.setAttribute("type", type);
+
+    const durationEl = directChild(noteEl, "duration");
+    const anchors = Array.from(noteEl.children)
+        .filter(el => el.tagName === "tie" || el.tagName === "instrument");
+
+    if(anchors.length){
+        noteEl.insertBefore(tie, anchors[0]);
+    }else if(durationEl && durationEl.nextSibling){
+        noteEl.insertBefore(tie, durationEl.nextSibling);
+    }else{
+        noteEl.appendChild(tie);
+    }
+
+    const notations = ensureNotations(noteEl);
+
+    directChildren(notations, "tied")
+        .filter(el => el.getAttribute("type") === type)
+        .forEach(el => el.remove());
+
+    const tied = doc.createElement("tied");
+    tied.setAttribute("type", type);
+    notations.appendChild(tied);
+}
+
+function nextSlurNumber(doc){
+
+    const counts = new Map();
+
+    doc.querySelectorAll("slur").forEach(slur => {
+
+        const number = slur.getAttribute("number") || "1";
+
+        counts.set(number, (counts.get(number) || 0) + 1);
+    });
+
+    for(let n = 1; n <= 6; n++){
+
+        if(!counts.has(String(n))) return String(n);
+    }
+
+    let best = "1";
+    let bestCount = Infinity;
+
+    for(let n = 1; n <= 6; n++){
+
+        const count = counts.get(String(n)) || 0;
+
+        if(count < bestCount){
+            best = String(n);
+            bestCount = count;
+        }
+    }
+
+    return best;
+}
+
+function addNoteSlur(firstNoteEl, secondNoteEl, number){
+
+    [[firstNoteEl, "start"], [secondNoteEl, "stop"]].forEach(([noteEl, type]) => {
+
+        const notations = ensureNotations(noteEl);
+
+        const slur = noteEl.ownerDocument.createElement("slur");
+
+        slur.setAttribute("type", type);
+        slur.setAttribute("number", number);
+
+        notations.appendChild(slur);
+    });
+}
+
+function absoluteStartQ(entry){
+
+    let q = entry.startQ;
+
+    for(let mi = 0; mi < entry.mi; mi++){
+
+        const info = fullNoteModel?.measureInfo?.[`${entry.partIndex}:${mi}`];
+
+        if(info) q += info.spanQ;
+    }
+
+    return q;
+}
+
+function selectedPairInTimeOrder(){
+
+    const entries = currentSelectedEntries();
+
+    if(entries.length !== 2) return null;
+
+    return entries.sort((a, b) =>
+        absoluteStartQ(a) - absoluteStartQ(b) ||
+        a.midi - b.midi
+    );
+}
+
+function addTieToSelection(){
+
+    const pair = selectedPairInTimeOrder();
+
+    if(!pair) return;
+
+    const [first, second] = pair;
+
+    if(
+        first.midi !== second.midi ||
+        first.partIndex !== second.partIndex ||
+        first.staff !== second.staff ||
+        first.voice !== second.voice
+    ){
+        editStatus.textContent =
+            "延音线要求两个音符在同一谱表、同一声部线，且音高相同。";
+        editStatus.classList.add("error");
+        return;
+    }
+
+    const gap =
+        absoluteStartQ(second) - absoluteStartQ(first) - first.durQ;
+
+    if(Math.abs(gap) > 1e-4){
+        editStatus.textContent =
+            "延音线要求两个音符首尾相接，中间不能隔开时间。";
+        editStatus.classList.add("error");
+        return;
+    }
+
+    mutateFullScore(() => {
+
+        addNoteTie(first.noteEl, "start");
+        addNoteTie(second.noteEl, "stop");
+
+    }, "⌒ 已添加延音线（tie）");
+
+    editStatus.classList.remove("error");
+}
+
+function addSlurToSelection(){
+
+    const pair = selectedPairInTimeOrder();
+
+    if(!pair) return;
+
+    const [first, second] = pair;
+
+    if(
+        first.partIndex !== second.partIndex ||
+        first.staff !== second.staff ||
+        first.voice !== second.voice
+    ){
+        editStatus.textContent =
+            "连音线要求两个音符在同一谱表、同一声部线。";
+        editStatus.classList.add("error");
+        return;
+    }
+
+    mutateFullScore(() => {
+
+        const number = nextSlurNumber(sourceDoc);
+
+        addNoteSlur(first.noteEl, second.noteEl, number);
+
+    }, "⌒ 已添加连音线（slur）");
+
+    editStatus.classList.remove("error");
+}
+
+/* =========================================================
+   全谱编辑：在休止符位置添加音符
+========================================================= */
+
+function parsePitchInput(text){
+
+    const match = /^\s*([A-Ga-g])([#b♯♭]?)(-?\d+)\s*$/.exec(text || "");
+
+    if(!match){
+        throw new Error("音高格式应为 C4、F#4、Bb3 这样的写法");
+    }
+
+    const step = match[1].toUpperCase();
+    const accidental = match[2];
+    const octave = parseInt(match[3], 10);
+
+    const alter =
+        accidental === "#" || accidental === "♯" ? 1 :
+        accidental === "b" || accidental === "♭" ? -1 : 0;
+
+    const base = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 }[step];
+
+    return {
+        step,
+        alter,
+        octave,
+        midi: clamp((octave + 1) * 12 + base + alter, 0, 127)
+    };
+}
+
+function addSelectedPartIndex(){
+    const n = parseInt(addPartSelect.value, 10);
+    return Number.isFinite(n) ? n : 0;
+}
+
+function populateAddVoices(preferredVoice=null){
+
+    const partIndex = addSelectedPartIndex();
+    const info = sourcePartInfo[partIndex];
+
+    addVoiceSelect.innerHTML = "";
+
+    if(!info){
+        addVoiceSelect.disabled = true;
+        return;
+    }
+
+    const staff = addStaffSelect.value || "1";
+    const counts = new Map();
+
+    directChildren(info.partEl, "measure").forEach(mEl => {
+
+        mEl.querySelectorAll("note").forEach(noteEl => {
+
+            const noteStaff = childText(noteEl, "staff") || "1";
+
+            if(noteStaff !== staff) return;
+
+            const voice = childText(noteEl, "voice") || "1";
+
+            if(!counts.has(voice)) counts.set(voice, 0);
+
+            if(
+                !hasDirectChild(noteEl, "rest") &&
+                !hasDirectChild(noteEl, "grace") &&
+                directChild(noteEl, "pitch")
+            ){
+                counts.set(voice, counts.get(voice) + 1);
+            }
+        });
+    });
+
+    if(!counts.size) counts.set("1", 0);
+
+    const voices = Array.from(counts.keys()).sort((a, b) => {
+
+        const na = parseInt(a, 10);
+        const nb = parseInt(b, 10);
+
+        if(Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+
+        return String(a).localeCompare(String(b));
+    });
+
+    const wanted =
+        preferredVoice && counts.has(preferredVoice)
+            ? preferredVoice
+            : voices.reduce((best, voice) =>
+                counts.get(voice) > counts.get(best) ? voice : best
+            , voices[0]);
+
+    voices.forEach(voice => {
+
+        const opt = document.createElement("option");
+
+        opt.value = voice;
+        opt.textContent = `声部线 ${voice} · ${counts.get(voice)} 个音符`;
+
+        if(voice === wanted) opt.selected = true;
+
+        addVoiceSelect.appendChild(opt);
+    });
+
+    addVoiceSelect.disabled = false;
+}
+
+function populateAddStaffs(preferredStaff=null){
+
+    const info = sourcePartInfo[addSelectedPartIndex()];
+
+    addStaffSelect.innerHTML = "";
+
+    if(!info){
+        addStaffSelect.disabled = true;
+        populateAddVoices();
+        return;
+    }
+
+    for(let s = 1; s <= info.staves; s++){
+
+        const opt = document.createElement("option");
+
+        opt.value = String(s);
+        opt.textContent = `谱表 ${s}`;
+
+        if(preferredStaff && String(preferredStaff) === String(s)){
+            opt.selected = true;
+        }
+
+        addStaffSelect.appendChild(opt);
+    }
+
+    addStaffSelect.disabled = info.staves <= 1;
+
+    populateAddVoices();
+}
+
+function populateAddNoteControls(){
+
+    addPartSelect.innerHTML = "";
+
+    if(!sourcePartInfo.length){
+
+        addPartSelect.disabled = true;
+        addStaffSelect.disabled = true;
+        addVoiceSelect.disabled = true;
+
+        addMeasure.disabled = true;
+        addBeat.disabled = true;
+        addPitch.disabled = true;
+        addDuration.disabled = true;
+        addNoteBtn.disabled = true;
+
+        addStatus.textContent = "加载曲谱后即可添加音符。";
+        return;
+    }
+
+    sourcePartInfo.forEach(info => {
+
+        const opt = document.createElement("option");
+
+        opt.value = String(info.index);
+        opt.textContent = `${info.index + 1}. ${info.name}`;
+
+        addPartSelect.appendChild(opt);
+    });
+
+    addPartSelect.disabled = false;
+
+    addMeasure.disabled = false;
+    addBeat.disabled = false;
+    addPitch.disabled = false;
+    addDuration.disabled = false;
+    addNoteBtn.disabled = false;
+
+    addMeasure.min = "1";
+    addMeasure.max = String(sourceMeasureCount);
+    addMeasure.value = "1";
+
+    addBeat.min = "0";
+    addBeat.value = "0";
+
+    populateAddStaffs(1);
+
+    addStatus.textContent =
+        "位置以四分音符计算，0 = 小节开始。目标位置必须有足够长的休止符。";
+    addStatus.classList.remove("error");
+}
+
+function addNoteAtFormPosition(){
+
+    if(!sourceDoc) return;
+
+    const partIndex = addSelectedPartIndex();
+    const info = sourcePartInfo[partIndex];
+
+    if(!info) throw new Error("找不到所选声部");
+
+    const staff = addStaffSelect.value || "1";
+    const voice = addVoiceSelect.value || "1";
+    const mi = Math.max(0, (parseInt(addMeasure.value, 10) || 1) - 1);
+
+    const measureEls = directChildren(info.partEl, "measure");
+    const mEl = measureEls[mi];
+
+    if(!mEl) throw new Error("小节号超出范围");
+
+    const pitch = parsePitchInput(addPitch.value);
+    const durQ = parseFloat(addDuration.value);
+
+    if(!(durQ > 0)) throw new Error("时值不正确");
+
+    const model = fullNoteModel || collectXmlNotes(sourceDoc);
+    const measureInfo = model.measureInfo[`${partIndex}:${mi}`];
+
+    if(!measureInfo) throw new Error("找不到小节信息");
+
+    const divisions = measureInfo.divisions;
+    const spanQ = measureInfo.isPickup
+        ? measureInfo.spanQ
+        : measureInfo.nominalQ;
+
+    const qTicks = Math.round((parseFloat(addBeat.value) || 0) * divisions);
+    const durTicks = Math.round(durQ * divisions);
+
+    if(qTicks < 0 || durTicks < 1){
+        throw new Error("位置或时值不正确");
+    }
+
+    if((qTicks + durTicks) / divisions > spanQ + 1e-6){
+        throw new Error(
+            `超出小节范围：该小节可用 ${formatQ(spanQ)} 拍`
+        );
+    }
+
+    const state = {
+        divisions,
+        beats: measureInfo.beats,
+        beatType: measureInfo.beatType,
+        fifths: 0,
+        staves: info.staves,
+        clefs: {},
+        tempo: null
+    };
+
+    const { events, divisions: actualDivisions } =
+        collectVoiceEvents(mEl, state, staff, voice);
+
+    if(actualDivisions !== divisions){
+        throw new Error("小节内 divisions 不一致，请先检查原始曲谱");
+    }
+
+    const q = qTicks / divisions;
+    const actualDurQ = durTicks / divisions;
+
+    const restEvent = events.find(ev =>
+        ev.isRest &&
+        ev.els.length === 1 &&
+        ev.q <= q + 1e-6 &&
+        ev.q + ev.durQ >= q + actualDurQ - 1e-6
+    );
+
+    if(!restEvent){
+        throw new Error(
+            "该位置没有足够长的休止符。请选择休止符位置，或先缩短已有音符。"
+        );
+    }
+
+    const restEl = restEvent.els[0];
+    const parent = restEl.parentElement;
+    const doc = restEl.ownerDocument;
+
+    const restStartTicks = Math.round(restEvent.q * divisions);
+    const restTicks = Math.round(restEvent.durQ * divisions);
+    const prefixTicks = qTicks - restStartTicks;
+    const suffixTicks = restTicks - prefixTicks - durTicks;
+
+    if(prefixTicks < 0 || suffixTicks < 0){
+        throw new Error("休止符无法容纳该音符");
+    }
+
+    const prefixQ = prefixTicks / divisions;
+    const suffixQ = suffixTicks / divisions;
+
+    const newNote = doc.createElement("note");
+
+    const pitchEl = doc.createElement("pitch");
+    const stepEl = doc.createElement("step");
+    stepEl.textContent = pitch.step;
+    pitchEl.appendChild(stepEl);
+
+    if(pitch.alter){
+        const alterEl = doc.createElement("alter");
+        alterEl.textContent = String(pitch.alter);
+        pitchEl.appendChild(alterEl);
+    }
+
+    const octaveEl = doc.createElement("octave");
+    octaveEl.textContent = String(pitch.octave);
+    pitchEl.appendChild(octaveEl);
+
+    newNote.appendChild(pitchEl);
+
+    const durationEl = doc.createElement("duration");
+    durationEl.textContent = String(durTicks);
+    newNote.appendChild(durationEl);
+
+    const voiceEl = doc.createElement("voice");
+    voiceEl.textContent = voice;
+    newNote.appendChild(voiceEl);
+
+    const staffEl = doc.createElement("staff");
+    staffEl.textContent = staff;
+    newNote.appendChild(staffEl);
+
+    updateNoteType(newNote, actualDurQ);
+
+    let suffixRest = null;
+
+    if(prefixTicks > 0 && suffixTicks > 0){
+        suffixRest = restEl.cloneNode(true);
+    }
+
+    if(prefixTicks > 0){
+        setChildText(restEl, "duration", prefixTicks);
+        updateNoteType(restEl, prefixQ);
+        parent.insertBefore(newNote, restEl.nextSibling);
+    }else if(suffixTicks > 0){
+        setChildText(restEl, "duration", suffixTicks);
+        updateNoteType(restEl, suffixQ);
+        parent.insertBefore(newNote, restEl);
+    }else{
+        parent.insertBefore(newNote, restEl);
+        restEl.remove();
+    }
+
+    if(suffixRest){
+        setChildText(suffixRest, "duration", suffixTicks);
+        updateNoteType(suffixRest, suffixQ);
+        parent.insertBefore(suffixRest, newNote.nextSibling);
+    }
+
+    return `${midiPitchName(pitch.midi)} · ${durationLabel(actualDurQ)}`;
+}
+
+function submitAddNote(){
+
+    let summary = "";
+
+    const showError = e => {
+
+        addStatus.textContent = "添加失败：" + e.message;
+        addStatus.classList.add("error");
+    };
+
+    try{
+
+        const ok = mutateFullScore(
+            () => {
+                summary = addNoteAtFormPosition();
+            },
+            "",
+            showError
+        );
+
+        if(ok){
+            setStatus(`＋ 已添加音符：${summary}`);
+            addStatus.textContent = `已添加 ${summary}`;
+            addStatus.classList.remove("error");
+        }
+
+    }catch(e){
+
+        console.error(e);
+        showError(e);
+        setStatus("❌ 添加音符失败：" + e.message, true);
+    }
+}
+
+function buildFullNoteOverlay(){
+
+    if(!editMode || !osmd || !sourceDoc){
+        scoreContainer.querySelectorAll(".note-edit-layer")
+            .forEach(el => el.remove());
+        return;
+    }
+
+    fullNoteModel = collectXmlNotes(sourceDoc);
+
+    createNoteEditLayer(
+        scoreContainer,
+        osmd,
+        fullNoteModel,
+        {
+            fallbackPartIndex: 0,
+            getGrid: () => dragGridQ,
+            getMaxQ: entry => maxDurationForEntry(entry),
+            getPxPerQ: entry =>
+                measurePxPerQ(entry, measurePosMap, osmd, scoreContainer),
+            onSelect: selectFullNote,
+            onApply: applyFullDuration
+        }
+    );
+}
+
+/*
+    OSMD 的 autoResize / 字体加载会在 render() 之后再做一次布局。
+    立即按旧的 MeasureList 建覆盖层可能一个音符都对不上，
+    因此在短时间后再补建两次，保证编辑手柄稳定出现。
+*/
+function scheduleFullNoteOverlay(){
+
+    clearTimeout(fullOverlayTimer);
+
+    const build = () => {
+        if(editMode) buildFullNoteOverlay();
+    };
+
+    build();
+    setTimeout(build, 120);
+    fullOverlayTimer = setTimeout(build, 420);
+}
+
+async function refreshFullScore(){
+
+    if(!sourceDoc) return;
+
+    stopPlayback();
+
+    const scrollTop  = scoreWrapper.scrollTop;
+    const scrollLeft = scoreWrapper.scrollLeft;
+
+    const xml = serializeMusicXml(sourceDoc);
+
+    initOSMD();
+
+    await renderScore(xml);
+
+    applyParsedScore(parseMusicXML(xml, sourceDoc));
+
+    buildMeasurePosMap();
+
+    scoreWrapper.scrollTop  = scrollTop;
+    scoreWrapper.scrollLeft = scrollLeft;
+
+    playBtn.disabled = false;
+
+    if(editMode){
+        scheduleFullNoteOverlay();
+    }
+}
+
+function applyParsedScore(result){
+
+    timeline      = result.timeline;
+    measureEvents = result.measureEvents;
+    totalSec      = result.totalSec;
+    scoreParts    = result.scoreParts;
+
+    return result;
+}
+
+function pushFullUndo(){
+    undoStack.push(serializeMusicXml(sourceDoc));
+    if(undoStack.length > 40) undoStack.shift();
+    updateEditButtons();
+}
+
+async function applyFullDuration(entry, newQ){
+
+    if(!sourceDoc) return;
+
+    pushFullUndo();
+
+    const oldQ = entry.durQ;
+    const actualQ = applyDurationToXmlNote(entry, newQ, dragGridQ);
+
+    if(Math.abs(actualQ - oldQ) < 1e-5){
+        undoStack.pop();
+        updateEditButtons();
+        return;
+    }
+
+    setStatus(`✏️ 已将音符改为 ${formatQ(actualQ)} 拍，正在更新谱面…`);
+
+    try{
+        await refreshFullScore();
+        setStatus(
+            `✏️ 已修改音符时值：${formatQ(oldQ)} → ${formatQ(actualQ)} 拍`
+        );
+    }catch(e){
+        console.error(e);
+        setStatus("❌ 更新谱面失败：" + e.message, true);
+    }
+
+    updateEditButtons();
+}
+
+async function undoFullEdit(){
+
+    const xml = undoStack.pop();
+
+    if(!xml) return;
+
+    sourceDoc = new DOMParser().parseFromString(
+        xml,
+        "application/xml"
+    );
+
+    buildSourceStructure(sourceDoc);
+
+    clearFullSelection();
+
+    await refreshFullScore();
+
+    updateEditButtons();
+
+    setStatus("↶ 已撤销上一次修改");
+}
+
+async function resetFullScore(){
+
+    if(!originalXml) return;
+
+    if(!confirm("确定还原到刚加载时的原始曲谱吗？当前的所有修改都会丢失。")){
+        return;
+    }
+
+    sourceDoc = new DOMParser().parseFromString(
+        originalXml,
+        "application/xml"
+    );
+
+    undoStack = [];
+
+    buildSourceStructure(sourceDoc);
+
+    populateAddNoteControls();
+
+    clearFullSelection();
+
+    await refreshFullScore();
+
+    updateEditButtons();
+
+    setStatus("↺ 已还原到原始曲谱");
+}
+
+function saveFullScore(){
+
+    if(!sourceDoc) return;
+
+    const filename =
+        baseFileName(loadedFileName) + "_edited.musicxml";
+
+    downloadXml(
+        filename,
+        serializeMusicXml(sourceDoc, true)
+    );
+
+    setStatus(`💾 已导出 ${filename}`);
+}
+
+function buildSourceStructure(doc){
+
+    const structure = sourceStructure(doc);
+
+    sourcePartInfo = structure.parts;
+    sourceMeasureCount = structure.measureCount;
+
+    return structure;
+}
+
+function initOSMD(){
+
+    scoreContainer.innerHTML = "";
+
+    osmd =
+        new opensheetmusicdisplay.OpenSheetMusicDisplay(
+            "scoreContainer",
+            {
+                autoResize:true,
+                drawingParameters:"compacttight",
+                drawTitle:true,
+                followCursor:false
+            }
+        );
+}
+
+async function renderScore(xml){
+
+    await osmd.load(xml);
+    await osmd.render();
+}
+
+/* =========================================================
+   Measure Position
+========================================================= */
+
+function buildMeasurePosMap(){
+
+    measurePosMap = buildMeasurePosMapFrom(osmd);
+
+    /* 窗口缩放后重新贴一次高亮 */
+
+    if(isPlaying && lastHighlightedMeasure != null){
+
+        highlightMeasure(lastHighlightedMeasure);
+    }
+}
+
+/* =========================================================
+   Playback
+========================================================= */
+
+function currentPrograms(){
+
+    const override = instrumentSelect.value;
+
+    return scoreParts.map(part => ({
+
+        channel: part.channel,
+        program:
+            override === "auto"
+                ? part.program
+                : clamp(parseInt(override, 10), 0, 127),
+        volume: part.volume,
+        pan: part.pan
+    }));
+}
+
+function stopPlayback(){
+
+    playbackId++;
+
+    isPlaying = false;
+
+    clearInterval(schedulerTimer);
+    schedulerTimer = null;
+
+    timerIds.forEach(clearTimeout);
+    timerIds = [];
+
+    if(synth && audioCtx){
+
+        const now = audioCtx.currentTime;
+
+        /*
+            记录旧队列的到期时间。停止后立刻重播时，
+            startPlayback 会等这批旧事件过期再解除静音。
+        */
+        scheduledUntil = Math.max(
+            scheduledUntil,
+            now + SCHEDULE_LOOKAHEAD
+        );
+
+        /*
+            先把输出压到 0 再停音符：
+            worklet 队列里最多还有 300ms 已排好的事件，
+            静音能保证按下停止后立刻听不到声音，
+            稍后再补一次 stopAll 清掉这些音。
+        */
+
+        if(masterGain){
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+            masterGain.gain.linearRampToValueAtTime(0, now + 0.02);
+        }
+
+        try{
+            synth.stopAll(true);
+        }catch(e){}
+
+        clearTimeout(panicTimer);
+
+        panicTimer = setTimeout(() => {
+
+            try{
+                synth.stopAll(true);
+            }catch(e){}
+
+            /*
+                这里不恢复音量：保持静音直到下一次播放，
+                这样即使有滞留的释音尾巴也绝不会漏出来。
+            */
+
+            panicTimer = null;
+
+        }, SCHEDULE_LOOKAHEAD * 1000 + 250);
+    }
+
+    hideHighlight();
+
+    playBtn.disabled = false;
+    stopBtn.disabled = true;
+}
+
+function sendTimelineEvent(ev, at){
+
+    const options = { time: at };
+
+    if(ev.type === "on"){
+
+        synth.noteOn(ev.channel, ev.midi, ev.velocity, options);
+    }
+    else if(ev.type === "off"){
+
+        synth.noteOff(ev.channel, ev.midi, options);
+    }
+    else{
+
+        synth.controllerChange(
+            ev.channel,
+            ev.controller,
+            ev.value,
+            options
+        );
+    }
+}
+
+async function startPlayback(){
+
+    if(!timeline.length) return;
+
+    stopPlayback();
+
+    const myPlaybackId = ++playbackId;
+
+    isPlaying = true;
+
+    playBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    try{
+
+        await ensureSoundfont();
+
+    }catch(e){
+
+        isPlaying = false;
+
+        playBtn.disabled = false;
+        stopBtn.disabled = true;
+
+        setStatus(
+            "❌ 音色库加载失败：" + e.message +
+            "（请用本地服务器打开页面）",
+            true
+        );
+
+        return;
+    }
+
+    if(myPlaybackId !== playbackId) return;
+
+    clearTimeout(panicTimer);
+    panicTimer = null;
+
+    /* 布局稳定后校准一次小节坐标（滚动条出现会让视口宽度变化） */
+    buildMeasurePosMap();
+
+    const ctx  = audioCtx;
+    const now0 = ctx.currentTime;
+
+    /*
+        如果刚刚停止过，worklet 里还留着上一次排到未来
+        300ms 左右的事件。等它们过期后再解除静音，避免
+        旧音符在新一次播放开头漏出来。
+    */
+    const t0 = Math.max(
+        now0 + SCHEDULE_LOOKAHEAD,
+        scheduledUntil + 0.05
+    );
+
+    audioGateUntil = t0;
+
+    if(masterGain){
+
+        const g = masterGain.gain;
+        const fadeAt = Math.max(now0, t0 - 0.02);
+
+        g.cancelScheduledValues(now0);
+        g.setValueAtTime(0, now0);
+        g.setValueAtTime(0, fadeAt);
+        g.linearRampToValueAtTime(targetVolume, t0);
+    }
+
+    const speed = 1 / (tempoMultiplier || 1);
+
+    // 清掉上一次可能还在发声的音（队列里的旧事件已靠静音隔离）
+    synth.stopAll(true);
+
+    const programs = currentPrograms();
+
+    programs.forEach(p => {
+
+        synth.programChange(p.channel, p.program, { time:t0 });
+        synth.controllerChange(p.channel, 7,  p.volume, { time:t0 });
+        synth.controllerChange(p.channel, 10, clamp(p.pan + 64, 0, 127), { time:t0 });
+        synth.controllerChange(p.channel, 64, 0, { time:t0 });
+    });
+
+    /*
+        只把接下来 300ms 的事件交给 worklet，
+        避免整首曲子的 noteOn 提前排在队列里无法撤销。
+    */
+
+    let eventIndex = 0;
+
+    const feed = () => {
+
+        if(myPlaybackId !== playbackId) return;
+
+        const now = ctx.currentTime;
+        const horizon = now + SCHEDULE_LOOKAHEAD;
+
+        while(eventIndex < timeline.length){
+
+            const ev = timeline[eventIndex];
+            const at = t0 + ev.startSec * speed;
+
+            if(at > horizon) break;
+
+            const when = Math.max(at, now);
+
+            sendTimelineEvent(ev, when);
+
+            scheduledUntil = Math.max(scheduledUntil, when);
+
+            eventIndex++;
+        }
+
+        if(eventIndex >= timeline.length){
+
+            clearInterval(schedulerTimer);
+            schedulerTimer = null;
+        }
+    };
+
+    feed();
+    schedulerTimer = setInterval(feed, 25);
+
+    setStatus(
+        `🎶 播放中… ${scoreParts.length} 声部 · ` +
+        `${scoreParts.map(p => p.name).join(" / ")}`
+    );
+
+    /* -------- 光标 -------- */
+
+    const leadMs = Math.max(0, (t0 - ctx.currentTime) * 1000);
+
+    measureEvents.forEach(ev => {
+
+        const ms = ev.startSec * speed * 1000;
+
+        const tid = setTimeout(() => {
+
+            if(isPlaying && myPlaybackId === playbackId){
+                highlightMeasure(ev.measureIndex);
+            }
+
+        }, leadMs + Math.max(0, ms));
+
+        timerIds.push(tid);
+    });
+
+    /* -------- 结束 -------- */
+
+    const endId = setTimeout(() => {
+
+        if(isPlaying && myPlaybackId === playbackId){
+
+            stopPlayback();
+            setStatus("✅ 播放完毕");
+        }
+
+    }, leadMs + totalSec * speed * 1000 + 1500);
+
+    timerIds.push(endId);
+}
+
+/* =========================================================
+   Load
+========================================================= */
+
+async function loadScore(xml, fileName){
+
+    stopPlayback();
+
+    setStatus("📖 正在解析...");
+
+    playBtn.disabled = true;
+
+    try{
+
+        const doc = new DOMParser().parseFromString(
+            xml,
+            "application/xml"
+        );
+
+        if(doc.querySelector("parsererror")){
+            throw new Error("MusicXML 不是合法的 XML");
+        }
+
+        sourceDoc      = doc;
+        originalXml    = xml;
+        loadedFileName = fileName || "score.musicxml";
+        parsedFileName = loadedFileName;
+
+        undoStack = [];
+        editMode  = false;
+
+        initOSMD();
+
+        await renderScore(xml);
+
+        const info = applyParsedScore(parseMusicXML(xml, doc));
+
+        buildMeasurePosMap();
+
+        buildSourceStructure(doc);
+
+        selectedNoteKeys.clear();
+
+        populateAddNoteControls();
+
+        clearFullSelection();
+
+        updateEditButtons();
+
+        /* 滚动条出现 / OSMD 自动重排后，再校准一次 */
+        setTimeout(() => {
+
+            if(osmd) buildMeasurePosMap();
+
+            if(editMode) scheduleFullNoteOverlay();
+
+        }, 350);
+
+        playBtn.disabled = false;
+
+        setStatus(
+            `✅ ${loadedFileName} · ${info.partCount} 声部 · ` +
+            scoreParts
+                .map(p => `${p.name} (${GM_NAMES[p.program]})`)
+                .join(" / ")
+        );
+
+    }catch(e){
+
+        console.error(e);
+
+        setStatus(
+            "❌ 解析失败：" + e.message,
+            true
+        );
+    }
+}
+
+/* =========================================================
+   Events
+========================================================= */
+
+fileInput.addEventListener("change", e => {
+
+    const f = e.target.files[0];
+
+    if(!f) return;
+
+    const reader = new FileReader();
+
+    reader.onload = async ev => {
+
+        await loadScore(ev.target.result, f.name);
+    };
+
+    reader.readAsText(f);
+});
+
+playBtn.addEventListener("click", startPlayback);
+
+stopBtn.addEventListener("click", () => {
+
+    stopPlayback();
+
+    setStatus("⏸ 已停止");
+});
+
+/* =========================================================
+   编辑 / 歌眼片段事件
+========================================================= */
+
+editBtn.addEventListener("click", () => {
+
+    editMode = !editMode;
+
+    if(editMode){
+
+        buildMeasurePosMap();
+        scheduleFullNoteOverlay();
+
+        setStatus(
+            "✏️ 编辑模式：点击音符选择，左右拖动改变时值（按网格吸附）"
+        );
+    }
+    else{
+
+        clearFullSelection();
+
+        scoreContainer.querySelectorAll(".note-edit-layer")
+            .forEach(el => el.remove());
+
+        setStatus("👀 已退出编辑模式");
+    }
+
+    updateEditButtons();
+});
+
+gridSelect.addEventListener("change", () => {
+
+    dragGridQ = parseFloat(gridSelect.value) || 0.5;
+});
+
+undoBtn.addEventListener("click", () => {
+    undoFullEdit();
+});
+
+saveBtn.addEventListener("click", () => {
+    saveFullScore();
+});
+
+resetBtn.addEventListener("click", () => {
+    resetFullScore();
+});
+
+/* =========================================================
+   全谱编辑：按钮 / 表单 / 快捷键
+========================================================= */
+
+deleteNoteBtn.addEventListener("click", deleteSelectedNotes);
+
+pitchUpBtn.addEventListener("click", () => transposeSelectedNotes(1));
+
+pitchDownBtn.addEventListener("click", () => transposeSelectedNotes(-1));
+
+durDownBtn.addEventListener("click", () => changeSelectedDurations(-1));
+
+durUpBtn.addEventListener("click", () => changeSelectedDurations(1));
+
+tieBtn.addEventListener("click", addTieToSelection);
+
+slurBtn.addEventListener("click", addSlurToSelection);
+
+clearSelBtn.addEventListener("click", clearFullSelection);
+
+addPartSelect.addEventListener("change", () => {
+    populateAddStaffs(1);
+});
+
+addStaffSelect.addEventListener("change", () => {
+    populateAddVoices();
+});
+
+addNoteBtn.addEventListener("click", submitAddNote);
+
+window.addEventListener("keydown", e => {
+
+    const tag = document.activeElement?.tagName;
+    const typing =
+        tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+
+    if((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z"){
+
+        if(typing) return;
+
+        if(editMode && undoStack.length){
+            e.preventDefault();
+            undoFullEdit();
+        }
+
+        return;
+    }
+
+    if(!editMode || typing) return;
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+
+    if(e.key === "Delete" && selectedNoteKeys.size){
+
+        e.preventDefault();
+        deleteSelectedNotes();
+    }
+    else if(e.key === "ArrowUp" && selectedNoteKeys.size){
+
+        e.preventDefault();
+        transposeSelectedNotes(1);
+    }
+    else if(e.key === "ArrowDown" && selectedNoteKeys.size){
+
+        e.preventDefault();
+        transposeSelectedNotes(-1);
+    }
+    else if((e.key === "-" || e.key === "_") && selectedNoteKeys.size){
+
+        e.preventDefault();
+        changeSelectedDurations(-1);
+    }
+    else if((e.key === "+" || e.key === "=") && selectedNoteKeys.size){
+
+        e.preventDefault();
+        changeSelectedDurations(1);
+    }
+    else if(e.key === "Escape"){
+
+        clearFullSelection();
+    }
+});
+
+tempoSlider.addEventListener("input", () => {
+
+    tempoMultiplier =
+        parseInt(tempoSlider.value) / 100;
+
+    tempoText.textContent = tempoSlider.value + "%";
+});
+
+volumeSlider.addEventListener("input", () => {
+
+    targetVolume = parseInt(volumeSlider.value, 10) / 100;
+
+    if(masterGain && isPlaying && !panicTimer){
+
+        const now = audioCtx.currentTime;
+
+        /* 新一次播放还没真正开始：保持静音，音量在 t0 生效 */
+        if(now >= audioGateUntil){
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(targetVolume, now);
+        }
+        else{
+
+            masterGain.gain.cancelScheduledValues(now);
+            masterGain.gain.setValueAtTime(0, now);
+            masterGain.gain.setValueAtTime(
+                0,
+                Math.max(now, audioGateUntil - 0.02)
+            );
+            masterGain.gain.linearRampToValueAtTime(
+                targetVolume,
+                audioGateUntil
+            );
+        }
+    }
+});
+
+instrumentSelect.addEventListener("change", () => {
+
+    if(!synth) return;
+
+    const t = audioCtx.currentTime;
+
+    currentPrograms().forEach(p => {
+
+        synth.programChange(p.channel, p.program, { time:t });
+    });
+});
+
+window.addEventListener("resize", () => {
+
+    setTimeout(() => {
+
+        buildMeasurePosMap();
+
+        if(editMode) scheduleFullNoteOverlay();
+
+    }, 250);
+});
+
+if(new URLSearchParams(location.search).has("debug")){
+
+    // 调试钩子：只在 edit.html?debug=1 时暴露，方便排查解析/发声问题
+    window.__player = {
+        get timeline(){ return timeline; },
+        get parts(){ return scoreParts; },
+        get totalSec(){ return totalSec; },
+        get soundfontReady(){ return soundfontReady; },
+        get synth(){ return synth; },
+        get audioCtx(){ return audioCtx; },
+        get loudnessGain(){ return loudnessGain; },
+        get masterGain(){ return masterGain; },
+        get isPlaying(){ return isPlaying; },
+        get lastMeasure(){ return lastHighlightedMeasure; },
+        get posMap(){ return measurePosMap; },
+        get osmd(){ return osmd; },
+        get sourceDoc(){ return sourceDoc; },
+        get editMode(){ return editMode; },
+        get fullNoteModel(){ return fullNoteModel; },
+        collectXmlNotes: doc => collectXmlNotes(doc || sourceDoc),
+        rebuild: () => buildMeasurePosMap(),
+        rebuildHandles: () => buildFullNoteOverlay(),
+        refresh: () => refreshFullScore(),
+        get scoreWrapper(){ return scoreWrapper; },
+        loadScore
+    };
+}
+
+initFeatureNav("edit.html");
+
+setStatus("🎼 就绪，请加载 MusicXML 文件");
+
+/* 页面空闲时预取音色库，第一次点播放就不用等 */
+
+if(location.protocol !== "file:"){
+
+    const idle =
+        window.requestIdleCallback ||
+        (fn => setTimeout(fn, 800));
+
+    idle(() => {
+
+        ensureSoundfont().then(() => {
+
+            if(!isPlaying && !parsedFileName){
+                setStatus("🎼 音色库就绪，请加载 MusicXML 文件");
+            }
+
+        }).catch(e => console.warn("音色库预加载失败：", e));
+    });
+}
+
+</script>
+
+</body>
+</html>

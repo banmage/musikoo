@@ -159,6 +159,8 @@ footer{
 
     <div class="toolbar">
 
+        <nav class="feature-nav" id="featureNav" aria-label="功能导航"></nav>
+
         <label class="file-btn">
             📂 加载 MusicXML
             <input
@@ -229,7 +231,12 @@ footer{
     </div>
 
     <footer>
-        OSMD + SpessaSynth（MuseScore General SF3）MusicXML 播放器
+        OSMD + SpessaSynth（MuseScore General SF3）MusicXML 播放器 ·
+        构建 2026-10-28-r2 ·
+        <a href="./play.html">功能首页</a> ·
+        <a href="./edit.html">谱面编辑</a> ·
+        <a href="./extract.html">歌眼抽取</a> ·
+        <a href="./new.html">新建曲谱</a>
     </footer>
 
 </div>
@@ -269,6 +276,7 @@ if (location.protocol === "file:") {
 <script type="module">
 
 import { WorkletSynthesizer } from "./vendor/spessasynth_lib.js";
+import { initFeatureNav } from "./js/musikoo-core.js?v=20261028b";
 
 /* =========================================================
    DOM
@@ -1077,27 +1085,20 @@ function parsePartMeasures(partEl){
                 }
             });
 
-            const isImplicit =
-                mEl.getAttribute("implicit") === "yes";
-
             const nominalQ = beats * (4 / beatType);
 
             /*
-                弱起小节（anacrusis）的实际时值比名义时值短。
-                MuseScore 导出的弱起小节经常不带 implicit="yes"，
-                所以第一小节内容不足整小节时也按实际内容计时，
-                否则弱起音之后会多出一段整小节的空白。
+                弱起小节（anacrusis）或反复段落之间的短小节，
+                实际时值比名义时值短。MuseScore 导出的这类小节
+                经常不带 implicit="yes"（反复段落的弱起、第一/第二
+                结尾尤其如此），所以不能只看第一小节或 implicit，
+                只要内容不足整小节就按实际内容计时，否则这些小节
+                会被补成整小节，听起来时值被延长。
             */
             const durationQ =
-                isImplicit && maxEndQ > 0
+                maxEndQ > 0 && maxEndQ < nominalQ
                     ? maxEndQ
-                    : (
-                        measureIndex === 0 &&
-                        maxEndQ > 0 &&
-                        maxEndQ < nominalQ
-                    )
-                        ? maxEndQ
-                        : nominalQ;
+                    : nominalQ;
 
             measures.push({
                 notes,
@@ -1902,6 +1903,8 @@ async function loadScore(xml, fileName){
 
         setStatus(
             `✅ ${fileName} · ${info.partCount} 声部 · ` +
+            `总长 ${Math.floor(totalSec / 60)}:` +
+            `${String(Math.round(totalSec % 60)).padStart(2, "0")} · ` +
             scoreParts
                 .map(p => `${p.name} (${GM_NAMES[p.program]})`)
                 .join(" / ")
@@ -2023,6 +2026,8 @@ if(new URLSearchParams(location.search).has("debug")){
         loadScore
     };
 }
+
+initFeatureNav("player.html");
 
 setStatus("🎼 就绪，请加载 MusicXML 文件");
 

@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" href="data:,">
+
+<title>Musikoo · 新建曲谱</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:24px;
+    background:#eef3f8;
+    font-family:system-ui,-apple-system,sans-serif;
+}
+
+.app{
+    max-width:1820px;
+    margin:auto;
+    display:flex;
+    flex-direction:column;
+    height:calc(100vh - 48px);
+    min-height:600px;
+    background:#fff;
+    border-radius:28px;
+    overflow:hidden;
+    box-shadow:0 18px 40px rgba(0,0,0,.18);
+}
+
+.toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:12px;
+    padding:16px 22px;
+    border-bottom:1px solid #e9edf2;
+    background:#fbfdff;
+}
+
+.brand{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    color:#1c2d40;
+    font-weight:700;
+    font-size:.95rem;
+}
+
+.brand small{
+    display:block;
+    color:#8794a4;
+    font-weight:500;
+    font-size:.7rem;
+}
+
+#saveNewBtn{
+    margin-left:auto;
+    background:#17654a;
+    color:#fff;
+    border:none;
+    border-radius:999px;
+    padding:10px 22px;
+    font-weight:600;
+    cursor:pointer;
+}
+
+#saveNewBtn:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+}
+
+.status{
+    background:#edf3ff;
+    color:#24436c;
+    padding:8px 15px;
+    border-radius:999px;
+    font-size:.8rem;
+    max-width:46ch;
+}
+
+.main-area{
+    display:flex;
+    flex:1 1 auto;
+    min-height:0;
+    min-width:0;
+}
+
+#builderPanel{
+    display:flex;
+    flex-direction:column;
+    flex:0 0 430px;
+    width:430px;
+    min-width:360px;
+    border-right:1px solid #e9edf2;
+    background:#fbfdff;
+    overflow:auto;
+}
+
+.panel-head{
+    padding:20px 20px 12px;
+    border-bottom:1px solid #edf2f5;
+}
+
+.panel-head h1{
+    margin:0 0 6px;
+    font-size:1.05rem;
+    color:#1c2d40;
+}
+
+.panel-head p{
+    margin:0;
+    color:#7b8797;
+    font-size:.76rem;
+    line-height:1.65;
+}
+
+.form-section{
+    padding:14px 20px;
+    border-bottom:1px solid #edf2f5;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.section-title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    color:#425166;
+    font-size:.78rem;
+    font-weight:700;
+    letter-spacing:.02em;
+}
+
+.section-title span{
+    color:#8b96a5;
+    font-weight:500;
+    font-size:.72rem;
+}
+
+.form-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:.8rem;
+    color:#425166;
+}
+
+.form-row > span{
+    flex:0 0 54px;
+}
+
+.form-row input,
+.form-row select{
+    flex:1 1 auto;
+    min-width:0;
+    border:1px solid #d6dee8;
+    border-radius:9px;
+    padding:7px 9px;
+    background:#fff;
+    color:#1c2d40;
+    font:inherit;
+    font-size:.8rem;
+}
+
+.form-row input[type="number"]{
+    width:82px;
+    flex:0 0 82px;
+}
+
+.form-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:9px;
+}
+
+.form-grid .form-row > span{
+    flex:0 0 auto;
+}
+
+.measure-bar{
+    display:flex;
+    align-items:center;
+    gap:6px;
+}
+
+.measure-bar button{
+    border:none;
+    border-radius:9px;
+    padding:7px 10px;
+    background:#e9eff6;
+    color:#27384c;
+    font-size:.76rem;
+    font-weight:600;
+    cursor:pointer;
+}
+
+.measure-bar button:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+}
+
+.measure-bar select{
+    flex:1 1 auto;
+    min-width:0;
+    border:1px solid #d6dee8;
+    border-radius:9px;
+    padding:7px 9px;
+    background:#fff;
+    color:#1c2d40;
+    font:inherit;
+    font-size:.78rem;
+}
+
+.measure-meter{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    padding:7px 10px;
+    border-radius:9px;
+    background:#f4f8fc;
+    color:#5e6d80;
+    font-size:.74rem;
+}
+
+.measure-meter strong{
+    color:#1f5c3b;
+}
+
+.measure-meter.full strong{
+    color:#a23c2c;
+}
+
+.note-form{
+    display:flex;
+    flex-direction:column;
+    gap:9px;
+}
+
+.note-form .form-row > span{
+    flex:0 0 46px;
+}
+
+.toggle-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+}
+
+.toggle-row label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 10px;
+    border:1px dashed #d7e2ee;
+    border-radius:999px;
+    background:#f8fbfe;
+    color:#51647a;
+    font-size:.75rem;
+    cursor:pointer;
+}
+
+.toggle-row input{
+    width:15px;
+    height:15px;
+    accent-color:#2f5f9e;
+}
+
+#addNewNoteBtn{
+    border:none;
+    border-radius:999px;
+    padding:9px 16px;
+    background:#2f5f9e;
+    color:#fff;
+    font-weight:600;
+    font-size:.8rem;
+    cursor:pointer;
+}
+
+#addNewNoteBtn:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+}
+
+.note-list{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+    min-height:38px;
+    padding:9px;
+    border:1px dashed #dfe7ef;
+    border-radius:10px;
+    background:#fff;
+}
+
+.note-empty{
+    color:#98a4b3;
+    font-size:.74rem;
+    align-self:center;
+}
+
+.note-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    padding:4px 5px 4px 9px;
+    border:1px solid #d7e2ee;
+    border-radius:999px;
+    background:#f4f8fc;
+    color:#2a3d52;
+    font-size:.73rem;
+}
+
+.note-chip.chord{
+    background:#eef3fb;
+    border-color:#b9cdea;
+}
+
+.note-chip.rest{
+    background:#f6f2ea;
+    border-color:#e6dcc9;
+    color:#7d6a4b;
+}
+
+.note-chip small{
+    color:#8c99a8;
+    font-size:.68rem;
+}
+
+.note-chip button{
+    width:18px;
+    height:18px;
+    padding:0;
+    border:none;
+    border-radius:50%;
+    background:#e4ebf3;
+    color:#5d6d7e;
+    font-size:.72rem;
+    line-height:1;
+    cursor:pointer;
+}
+
+.note-chip button:hover{
+    background:#e9c9c3;
+    color:#96382b;
+}
+
+.builder-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+}
+
+.builder-actions button{
+    border:none;
+    border-radius:999px;
+    padding:8px 14px;
+    background:#e9eff6;
+    color:#27384c;
+    font-size:.78rem;
+    font-weight:600;
+    cursor:pointer;
+}
+
+#resetNewBtn{
+    background:#f6e9e7;
+    color:#8e3327;
+}
+
+.builder-hint{
+    color:#7b8797;
+    font-size:.72rem;
+    line-height:1.65;
+}
+
+#previewWrapper{
+    position:relative;
+    flex:1 1 auto;
+    min-width:0;
+    overflow:auto;
+    background:#fffdf8;
+    padding:24px;
+}
+
+#previewContainer{
+    position:relative;
+}
+
+.preview-empty{
+    padding:80px 20px;
+    text-align:center;
+    color:#a2adbb;
+    font-size:.9rem;
+}
+
+footer{
+    padding:9px 22px;
+    border-top:1px solid #eef2f6;
+    color:#9aa6b4;
+    font-size:.72rem;
+    background:#fbfdff;
+}
+
+footer a{
+    color:#4b6f98;
+    text-decoration:none;
+}
+
+@media (max-width:1100px){
+
+    .app{
+        height:auto;
+        min-height:100vh;
+    }
+
+    .main-area{
+        flex-direction:column;
+    }
+
+    #builderPanel{
+        flex:0 0 auto;
+        width:100%;
+        min-width:0;
+        border-right:none;
+        border-bottom:1px solid #e9edf2;
+    }
+
+    #previewWrapper{
+        min-height:60vh;
+    }
+
+    #saveNewBtn{
+        margin-left:0;
+    }
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+    <div class="toolbar">
+
+        <nav class="feature-nav" id="featureNav" aria-label="功能导航"></nav>
+
+        <div class="brand">
+            ✨ 新建曲谱
+            <small>从零开始写一段 MusicXML</small>
+        </div>
+
+        <div class="status" id="status">
+            填写曲谱信息，然后逐小节添加音符。
+        </div>
+
+        <button id="saveNewBtn">💾 导出 MusicXML</button>
+
+    </div>
+
+    <div class="main-area">
+
+        <aside id="builderPanel">
+
+            <div class="panel-head">
+                <h1>曲谱信息</h1>
+                <p>
+                    设置标题、拍号、调号与速度。音符会按顺序追加到当前小节，
+                    满一小节后请新增下一小节。右侧会实时预览并检查 MusicXML。
+                </p>
+            </div>
+
+            <div class="form-section">
+
+                <div class="section-title">基本设置</div>
+
+                <label class="form-row">
+                    <span>标题</span>
+                    <input id="titleInput" type="text" maxlength="80" value="未命名曲谱">
+                </label>
+
+                <label class="form-row">
+                    <span>作曲</span>
+                    <input id="composerInput" type="text" maxlength="60" placeholder="可选">
+                </label>
+
+                <div class="form-grid">
+
+                    <label class="form-row">
+                        <span>拍号</span>
+                        <select id="beatsSelect">
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4" selected>4</option>
+                            <option value="6">6</option>
+                            <option value="9">9</option>
+                            <option value="12">12</option>
+                        </select>
+                        <select id="beatTypeSelect">
+                            <option value="4" selected>/4</option>
+                            <option value="8">/8</option>
+                        </select>
+                    </label>
+
+                    <label class="form-row">
+                        <span>调号</span>
+                        <select id="keySelect"></select>
+                    </label>
+
+                </div>
+
+                <label class="form-row">
+                    <span>速度</span>
+                    <input id="tempoInput" type="number" min="30" max="240" step="1" value="96">
+                    <span style="flex:0 0 auto;color:#8b96a5;">BPM</span>
+                </label>
+
+            </div>
+
+            <div class="form-section">
+
+                <div class="section-title">
+                    小节
+                    <span id="measureCounter"></span>
+                </div>
+
+                <div class="measure-bar">
+                    <button id="prevMeasureBtn" title="上一小节">◀</button>
+                    <select id="measureSelect"></select>
+                    <button id="nextMeasureBtn" title="下一小节">▶</button>
+                    <button id="addMeasureBtn" title="在当前曲谱末尾增加一小节">＋ 小节</button>
+                    <button id="deleteMeasureBtn" title="删除当前小节">🗑</button>
+                </div>
+
+                <div class="measure-meter" id="measureMeter">
+                    <span id="measureMeterText">已用 0 拍 / 共 4 拍</span>
+                    <strong id="measureRemainText">剩余 4 拍</strong>
+                </div>
+
+            </div>
+
+            <div class="form-section">
+
+                <div class="section-title">添加音符</div>
+
+                <div class="note-form">
+
+                    <label class="form-row">
+                        <span>音高</span>
+                        <select id="pitchSelect"></select>
+                    </label>
+
+                    <label class="form-row">
+                        <span>时值</span>
+                        <select id="durationSelect"></select>
+                    </label>
+
+                </div>
+
+                <div class="toggle-row">
+                    <label title="插入休止符，不发声">
+                        <input type="checkbox" id="restToggle">
+                        休止符
+                    </label>
+
+                    <label title="与上一个音同时发声；时值自动跟随上一个音">
+                        <input type="checkbox" id="chordToggle">
+                        和弦音
+                    </label>
+                </div>
+
+                <button id="addNewNoteBtn" type="button">＋ 添加到当前小节</button>
+
+                <div class="section-title" style="margin-top:2px;">
+                    当前小节的音符
+                    <span id="noteCountText">0 个</span>
+                </div>
+
+                <div class="note-list" id="noteList"></div>
+
+                <div class="builder-actions">
+                    <button id="clearMeasureBtn" type="button">清空本小节</button>
+                </div>
+
+                <div class="builder-hint" id="builderStatus">
+                    提示：和弦音需要先有一个非休止符的音；选中 64 分音符时，
+                    内部会自动使用 divisions=16，保证时值不被舍入。
+                </div>
+
+            </div>
+
+            <div class="form-section">
+
+                <div class="builder-actions">
+                    <button id="resetNewBtn" type="button">↺ 新建空白曲谱</button>
+                </div>
+
+            </div>
+
+        </aside>
+
+        <div id="previewWrapper">
+            <div id="previewContainer">
+                <div class="preview-empty">正在生成预览…</div>
+            </div>
+        </div>
+
+    </div>
+
+    <footer>
+        Musikoo 新建曲谱 · 与编辑 / 抽取页面共用同一套 MusicXML 解析与时值函数 ·
+        <a href="./play.html">返回功能首页</a>
+    </footer>
+
+</div>
+
+<script src="./vendor/opensheetmusicdisplay.min.js"></script>
+
+<script type="module">
+
+import {
+    DURATION_NAMES,
+    NOTE_TYPE_TABLE,
+    baseFileName,
+    downloadXml,
+    formatQ,
+    initFeatureNav,
+    keyFifthsLabel,
+    midiPitchName,
+    midiToPitchParts,
+    serializeMusicXml,
+    updateNoteType,
+    xmlEscapeText
+} from "./js/musikoo-core.js?v=20261028b";
+
+/* =========================================================
+   状态
+========================================================= */
+
+const DIVISIONS = 16;
+
+const PITCH_MIN = 36;   // C2
+const PITCH_MAX = 96;   // C7
+
+const statusEl        = document.getElementById("status");
+const titleInput      = document.getElementById("titleInput");
+const composerInput   = document.getElementById("composerInput");
+const beatsSelect     = document.getElementById("beatsSelect");
+const beatTypeSelect  = document.getElementById("beatTypeSelect");
+const keySelect       = document.getElementById("keySelect");
+const tempoInput      = document.getElementById("tempoInput");
+const measureSelect   = document.getElementById("measureSelect");
+const prevMeasureBtn  = document.getElementById("prevMeasureBtn");
+const nextMeasureBtn  = document.getElementById("nextMeasureBtn");
+const addMeasureBtn   = document.getElementById("addMeasureBtn");
+const deleteMeasureBtn= document.getElementById("deleteMeasureBtn");
+const measureCounter  = document.getElementById("measureCounter");
+const measureMeter    = document.getElementById("measureMeter");
+const measureMeterText= document.getElementById("measureMeterText");
+const measureRemainText = document.getElementById("measureRemainText");
+const pitchSelect     = document.getElementById("pitchSelect");
+const durationSelect  = document.getElementById("durationSelect");
+const restToggle      = document.getElementById("restToggle");
+const chordToggle     = document.getElementById("chordToggle");
+const addNewNoteBtn   = document.getElementById("addNewNoteBtn");
+const clearMeasureBtn = document.getElementById("clearMeasureBtn");
+const noteList        = document.getElementById("noteList");
+const noteCountText   = document.getElementById("noteCountText");
+const builderStatus   = document.getElementById("builderStatus");
+const saveNewBtn      = document.getElementById("saveNewBtn");
+const resetNewBtn     = document.getElementById("resetNewBtn");
+const previewWrapper  = document.getElementById("previewWrapper");
+const previewContainer= document.getElementById("previewContainer");
+
+let state = createBlankState();
+let selectedMeasure = 0;
+let previewTimer = null;
+let previewToken = 0;
+
+/* =========================================================
+   状态构造
+========================================================= */
+
+function createBlankState(){
+
+    return {
+        title:"未命名曲谱",
+        composer:"",
+        beats:4,
+        beatType:4,
+        fifths:0,
+        tempo:96,
+        measures:[{ notes:[] }]
+    };
+}
+
+function nominalQ(){
+    return state.beats * (4 / state.beatType);
+}
+
+function measureUsedQ(measure){
+
+    return measure.notes.reduce(
+        (sum, note) => note.chord ? sum : sum + note.durQ,
+        0
+    );
+}
+
+function currentMeasure(){
+    return state.measures[selectedMeasure] || state.measures[0];
+}
+
+/* =========================================================
+   控件初始化
+========================================================= */
+
+function populateKeySelect(){
+
+    keySelect.innerHTML = "";
+
+    for(let fifths = -7; fifths <= 7; fifths++){
+
+        const opt = document.createElement("option");
+
+        opt.value = String(fifths);
+        opt.textContent = `${keyFifthsLabel(fifths)}（${fifths >= 0 ? "+" : ""}${fifths}）`;
+
+        keySelect.appendChild(opt);
+    }
+
+    keySelect.value = String(state.fifths);
+}
+
+function populatePitchSelect(){
+
+    pitchSelect.innerHTML = "";
+
+    for(let midi = PITCH_MIN; midi <= PITCH_MAX; midi++){
+
+        const opt = document.createElement("option");
+
+        opt.value = String(midi);
+        opt.textContent = midiPitchName(midi);
+
+        pitchSelect.appendChild(opt);
+    }
+
+    pitchSelect.value = "60";
+}
+
+function populateDurationSelect(){
+
+    durationSelect.innerHTML = "";
+
+    NOTE_TYPE_TABLE.forEach((entry, index) => {
+
+        const opt = document.createElement("option");
+
+        opt.value = String(entry.q);
+        opt.textContent =
+            `${DURATION_NAMES[entry.q] || entry.type} · ${formatQ(entry.q)} 拍`;
+
+        if(entry.q === 1) opt.selected = true;
+
+        durationSelect.appendChild(opt);
+    });
+}
+
+/* =========================================================
+   MusicXML 生成
+========================================================= */
+
+function createEl(doc, tag, text = null){
+
+    const el = doc.createElement(tag);
+
+    if(text != null) el.textContent = String(text);
+
+    return el;
+}
+
+function appendPitch(doc, noteEl, note){
+
+    const pitch = createEl(doc, "pitch");
+
+    pitch.appendChild(createEl(doc, "step", note.step));
+
+    if(note.alter){
+        pitch.appendChild(createEl(doc, "alter", note.alter));
+    }
+
+    pitch.appendChild(createEl(doc, "octave", note.octave));
+
+    noteEl.appendChild(pitch);
+}
+
+function buildScoreXml(){
+
+    const doc = document.implementation.createDocument("", "", null);
+
+    const score = doc.createElement("score-partwise");
+    score.setAttribute("version", "3.1");
+    doc.appendChild(score);
+
+    const work = createEl(doc, "work");
+    work.appendChild(createEl(doc, "work-title", state.title.trim() || "未命名曲谱"));
+    score.appendChild(work);
+
+    if(state.composer.trim()){
+
+        const identification = createEl(doc, "identification");
+        const creator = createEl(doc, "creator", state.composer.trim());
+
+        creator.setAttribute("type", "composer");
+        identification.appendChild(creator);
+        score.appendChild(identification);
+    }
+
+    const partList = createEl(doc, "part-list");
+    const scorePart = createEl(doc, "score-part");
+
+    scorePart.setAttribute("id", "P1");
+    scorePart.appendChild(createEl(doc, "part-name", "Piano"));
+
+    const scoreInstrument = createEl(doc, "score-instrument");
+    scoreInstrument.setAttribute("id", "P1-I1");
+    scoreInstrument.appendChild(createEl(doc, "instrument-name", "Piano"));
+    scorePart.appendChild(scoreInstrument);
+
+    const midiInstrument = createEl(doc, "midi-instrument");
+    midiInstrument.setAttribute("id", "P1-I1");
+    midiInstrument.appendChild(createEl(doc, "midi-channel", 1));
+    midiInstrument.appendChild(createEl(doc, "midi-program", 1));
+    scorePart.appendChild(midiInstrument);
+
+    partList.appendChild(scorePart);
+    score.appendChild(partList);
+
+    const part = createEl(doc, "part");
+    part.setAttribute("id", "P1");
+    score.appendChild(part);
+
+    const measureQ = nominalQ();
+
+    state.measures.forEach((measure, mi) => {
+
+        const measureEl = createEl(doc, "measure");
+
+        measureEl.setAttribute("number", String(mi + 1));
+
+        if(mi === 0){
+
+            const attributes = createEl(doc, "attributes");
+
+            attributes.appendChild(createEl(doc, "divisions", DIVISIONS));
+
+            const key = createEl(doc, "key");
+            key.appendChild(createEl(doc, "fifths", state.fifths));
+            attributes.appendChild(key);
+
+            const time = createEl(doc, "time");
+            time.appendChild(createEl(doc, "beats", state.beats));
+            time.appendChild(createEl(doc, "beat-type", state.beatType));
+            attributes.appendChild(time);
+
+            const clef = createEl(doc, "clef");
+            clef.appendChild(createEl(doc, "sign", "G"));
+            clef.appendChild(createEl(doc, "line", 2));
+            attributes.appendChild(clef);
+
+            measureEl.appendChild(attributes);
+
+            const direction = createEl(doc, "direction");
+            direction.setAttribute("placement", "above");
+
+            const directionType = createEl(doc, "direction-type");
+            directionType.appendChild(
+                createEl(doc, "words", `♩ = ${state.tempo}`)
+            );
+            direction.appendChild(directionType);
+
+            const sound = createEl(doc, "sound");
+            sound.setAttribute("tempo", String(state.tempo));
+            direction.appendChild(sound);
+
+            measureEl.appendChild(direction);
+        }
+
+        const notes = measure.notes;
+
+        if(!notes.length){
+
+            const noteEl = createEl(doc, "note");
+
+            const rest = createEl(doc, "rest");
+            rest.setAttribute("measure", "yes");
+            noteEl.appendChild(rest);
+
+            noteEl.appendChild(
+                createEl(doc, "duration", Math.round(measureQ * DIVISIONS))
+            );
+            noteEl.appendChild(createEl(doc, "voice", 1));
+
+            measureEl.appendChild(noteEl);
+
+        }else{
+
+            notes.forEach(note => {
+
+                const noteEl = createEl(doc, "note");
+
+                if(note.chord && !note.rest){
+                    noteEl.appendChild(createEl(doc, "chord"));
+                }
+
+                if(note.rest){
+
+                    noteEl.appendChild(createEl(doc, "rest"));
+
+                }else{
+
+                    appendPitch(doc, noteEl, note);
+                }
+
+                noteEl.appendChild(
+                    createEl(
+                        doc,
+                        "duration",
+                        Math.max(1, Math.round(note.durQ * DIVISIONS))
+                    )
+                );
+
+                noteEl.appendChild(createEl(doc, "voice", 1));
+
+                updateNoteType(noteEl, note.durQ);
+
+                measureEl.appendChild(noteEl);
+            });
+        }
+
+        part.appendChild(measureEl);
+    });
+
+    return serializeMusicXml(doc, true);
+}
+
+/* =========================================================
+   预览
+========================================================= */
+
+async function renderPreview(){
+
+    const token = ++previewToken;
+
+    let xml;
+
+    try{
+        xml = buildScoreXml();
+    }catch(e){
+        console.error(e);
+        setStatus("生成 MusicXML 失败：" + e.message, true);
+        return;
+    }
+
+    previewContainer.innerHTML = "";
+
+    try{
+
+        const osmd = new opensheetmusicdisplay.OpenSheetMusicDisplay(
+            "previewContainer",
+            {
+                autoResize:true,
+                drawingParameters:"compacttight",
+                drawTitle:true,
+                drawComposer:true,
+                followCursor:false
+            }
+        );
+
+        await osmd.load(xml);
+
+        if(token !== previewToken) return;
+
+        await osmd.render();
+
+        if(token === previewToken){
+            setStatus("✅ 预览已更新");
+        }
+
+    }catch(e){
+
+        console.error(e);
+
+        if(token === previewToken){
+            previewContainer.innerHTML =
+                '<div class="preview-empty">预览生成失败：' +
+                xmlEscapeText(e.message) +
+                '</div>';
+            setStatus("预览失败：" + e.message, true);
+        }
+    }
+}
+
+function schedulePreview(){
+
+    clearTimeout(previewTimer);
+
+    previewTimer = setTimeout(renderPreview, 220);
+}
+
+function setStatus(text, isError=false){
+
+    statusEl.textContent = text;
+    statusEl.style.color = isError ? "#a23c2c" : "#24436c";
+}
+
+/* =========================================================
+   界面刷新
+========================================================= */
+
+function clampSelectedMeasure(){
+
+    selectedMeasure = Math.max(
+        0,
+        Math.min(selectedMeasure, state.measures.length - 1)
+    );
+}
+
+function refreshMeasureSelect(){
+
+    clampSelectedMeasure();
+
+    measureSelect.innerHTML = "";
+
+    state.measures.forEach((measure, index) => {
+
+        const opt = document.createElement("option");
+
+        opt.value = String(index);
+        opt.textContent = `第 ${index + 1} 小节`;
+
+        if(index === selectedMeasure) opt.selected = true;
+
+        measureSelect.appendChild(opt);
+    });
+
+    prevMeasureBtn.disabled = selectedMeasure <= 0;
+    nextMeasureBtn.disabled = selectedMeasure >= state.measures.length - 1;
+    deleteMeasureBtn.disabled = state.measures.length <= 1;
+
+    measureCounter.textContent = `共 ${state.measures.length} 小节`;
+}
+
+function refreshNoteList(){
+
+    const measure = currentMeasure();
+
+    noteList.innerHTML = "";
+
+    noteCountText.textContent = `${measure.notes.length} 个`;
+
+    if(!measure.notes.length){
+
+        const empty = document.createElement("span");
+
+        empty.className = "note-empty";
+        empty.textContent = "这一小节还是空的，从上方添加第一个音吧。";
+
+        noteList.appendChild(empty);
+        return;
+    }
+
+    measure.notes.forEach((note, index) => {
+
+        const chip = document.createElement("span");
+
+        chip.className =
+            "note-chip" +
+            (note.rest ? " rest" : "") +
+            (note.chord ? " chord" : "");
+
+        const main = document.createElement("span");
+
+        main.textContent = note.rest
+            ? "休止"
+            : midiPitchName(
+                (note.octave + 1) * 12 +
+                { C:0, D:2, E:4, F:5, G:7, A:9, B:11 }[note.step] +
+                (note.alter || 0)
+            );
+
+        const meta = document.createElement("small");
+
+        meta.textContent =
+            (note.chord ? "和弦 · " : "") +
+            (DURATION_NAMES[note.durQ] || `${formatQ(note.durQ)} 拍`);
+
+        const remove = document.createElement("button");
+
+        remove.type = "button";
+        remove.textContent = "×";
+        remove.title = "删除这个音";
+
+        remove.addEventListener("click", () => {
+
+            if(!note.chord && measure.notes[index + 1]?.chord){
+                /* 删除和弦主音时，让下一个和弦音成为主音 */
+                measure.notes[index + 1].chord = false;
+            }
+
+            measure.notes.splice(index, 1);
+
+            refreshAll();
+        });
+
+        chip.appendChild(main);
+        chip.appendChild(meta);
+        chip.appendChild(remove);
+
+        noteList.appendChild(chip);
+    });
+}
+
+function refreshMeter(){
+
+    const used = measureUsedQ(currentMeasure());
+    const total = nominalQ();
+    const remain = total - used;
+
+    measureMeterText.textContent =
+        `已用 ${formatQ(used)} 拍 / 共 ${formatQ(total)} 拍`;
+
+    measureRemainText.textContent =
+        remain >= -1e-6
+            ? `剩余 ${formatQ(remain)} 拍`
+            : `超出 ${formatQ(-remain)} 拍`;
+
+    measureMeter.classList.toggle("full", used >= total - 1e-6);
+
+    const duration = parseFloat(durationSelect.value) || 1;
+
+    const chord = chordToggle.checked && !restToggle.checked;
+
+    addNewNoteBtn.disabled =
+        !chord && used + duration > total + 1e-6;
+
+    pitchSelect.disabled = restToggle.checked;
+    chordToggle.disabled = restToggle.checked;
+}
+
+function refreshAll(){
+    refreshMeasureSelect();
+    refreshNoteList();
+    refreshMeter();
+    schedulePreview();
+}
+
+/* =========================================================
+   音符操作
+========================================================= */
+
+function addNote(){
+
+    const measure = currentMeasure();
+
+    const rest = restToggle.checked;
+    const wantChord = chordToggle.checked && !rest;
+
+    let durQ = parseFloat(durationSelect.value) || 1;
+    let chord = false;
+
+    if(wantChord){
+
+        let leadIndex = measure.notes.length - 1;
+
+        while(
+            leadIndex >= 0 &&
+            measure.notes[leadIndex].chord
+        ){
+            leadIndex--;
+        }
+
+        const lead = measure.notes[leadIndex];
+
+        if(!lead || lead.rest){
+
+            builderStatus.textContent =
+                "和弦音前面必须有一个非休止符的音。";
+            builderStatus.style.color = "#a23c2c";
+            return;
+        }
+
+        durQ = lead.durQ;
+        chord = true;
+    }
+    else{
+
+        const used = measureUsedQ(measure);
+
+        if(used + durQ > nominalQ() + 1e-6){
+
+            builderStatus.textContent =
+                `当前小节只剩 ${formatQ(Math.max(0, nominalQ() - used))} 拍，` +
+                `放不下 ${formatQ(durQ)} 拍。可以缩短时值或新增一小节。`;
+            builderStatus.style.color = "#a23c2c";
+            return;
+        }
+    }
+
+    const midi = parseInt(pitchSelect.value, 10) || 60;
+
+    const note = rest
+        ? { rest:true, chord:false, durQ }
+        : {
+            rest:false,
+            chord,
+            durQ,
+            ...midiToPitchParts(midi, state.fifths < 0)
+        };
+
+    measure.notes.push(note);
+
+    builderStatus.textContent =
+        rest
+            ? `已添加 ${formatQ(durQ)} 拍休止符。`
+            : `已添加 ${midiPitchName(midi, state.fifths < 0)}，` +
+              `时值 ${formatQ(durQ)} 拍${chord ? "（和弦音）" : ""}。`;
+
+    builderStatus.style.color = "#7b8797";
+
+    refreshAll();
+}
+
+function resetBuilder(confirmFirst=true){
+
+    if(
+        confirmFirst &&
+        !confirm("新建空白曲谱会清空当前内容，确定继续吗？")
+    ){
+        return;
+    }
+
+    state = createBlankState();
+    selectedMeasure = 0;
+
+    titleInput.value = state.title;
+    composerInput.value = state.composer;
+    beatsSelect.value = String(state.beats);
+    beatTypeSelect.value = String(state.beatType);
+    keySelect.value = String(state.fifths);
+    tempoInput.value = String(state.tempo);
+
+    restToggle.checked = false;
+    chordToggle.checked = false;
+
+    refreshAll();
+}
+
+/* =========================================================
+   导出
+========================================================= */
+
+function saveScore(){
+
+    /* 取消还在排队的预览，避免它稍后把“已导出”的状态覆盖掉 */
+    clearTimeout(previewTimer);
+    previewToken++;
+
+    let xml;
+
+    try{
+        xml = buildScoreXml();
+    }catch(e){
+        setStatus("导出失败：" + e.message, true);
+        return;
+    }
+
+    const filename =
+        baseFileName(state.title.trim() || "未命名曲谱") + ".musicxml";
+
+    downloadXml(filename, xml);
+
+    setStatus(`💾 已导出 ${filename}`);
+    builderStatus.textContent = `已导出 ${filename}`;
+    builderStatus.style.color = "#2b6b4a";
+}
+
+/* =========================================================
+   事件
+========================================================= */
+
+titleInput.addEventListener("input", () => {
+
+    state.title = titleInput.value;
+    schedulePreview();
+});
+
+composerInput.addEventListener("input", () => {
+
+    state.composer = composerInput.value;
+    schedulePreview();
+});
+
+beatsSelect.addEventListener("change", () => {
+
+    state.beats = parseInt(beatsSelect.value, 10) || 4;
+    refreshMeter();
+    schedulePreview();
+});
+
+beatTypeSelect.addEventListener("change", () => {
+
+    state.beatType = parseInt(beatTypeSelect.value, 10) || 4;
+    refreshMeter();
+    schedulePreview();
+});
+
+keySelect.addEventListener("change", () => {
+
+    state.fifths = parseInt(keySelect.value, 10) || 0;
+    refreshNoteList();
+    schedulePreview();
+});
+
+tempoInput.addEventListener("input", () => {
+
+    state.tempo = Math.max(
+        30,
+        Math.min(240, parseInt(tempoInput.value, 10) || 96)
+    );
+    schedulePreview();
+});
+
+measureSelect.addEventListener("change", () => {
+
+    selectedMeasure = parseInt(measureSelect.value, 10) || 0;
+    refreshAll();
+});
+
+prevMeasureBtn.addEventListener("click", () => {
+
+    selectedMeasure--;
+    refreshAll();
+});
+
+nextMeasureBtn.addEventListener("click", () => {
+
+    selectedMeasure++;
+    refreshAll();
+});
+
+addMeasureBtn.addEventListener("click", () => {
+
+    state.measures.push({ notes:[] });
+    selectedMeasure = state.measures.length - 1;
+
+    refreshAll();
+    setStatus(`已新增第 ${selectedMeasure + 1} 小节`);
+});
+
+deleteMeasureBtn.addEventListener("click", () => {
+
+    if(state.measures.length <= 1) return;
+
+    if(!confirm(`删除第 ${selectedMeasure + 1} 小节？`)) return;
+
+    state.measures.splice(selectedMeasure, 1);
+    selectedMeasure = Math.min(selectedMeasure, state.measures.length - 1);
+
+    refreshAll();
+    setStatus("🗑 已删除一小节");
+});
+
+clearMeasureBtn.addEventListener("click", () => {
+
+    if(!currentMeasure().notes.length) return;
+
+    if(!confirm(`清空第 ${selectedMeasure + 1} 小节的音符？`)) return;
+
+    currentMeasure().notes = [];
+    refreshAll();
+    setStatus("已清空当前小节");
+});
+
+restToggle.addEventListener("change", () => {
+
+    if(restToggle.checked) chordToggle.checked = false;
+
+    refreshMeter();
+});
+
+chordToggle.addEventListener("change", () => {
+
+    if(chordToggle.checked) restToggle.checked = false;
+
+    refreshMeter();
+});
+
+durationSelect.addEventListener("change", refreshMeter);
+
+addNewNoteBtn.addEventListener("click", addNote);
+
+saveNewBtn.addEventListener("click", saveScore);
+
+resetNewBtn.addEventListener("click", () => resetBuilder(true));
+
+/* =========================================================
+   启动
+========================================================= */
+
+initFeatureNav("new.html");
+
+populateKeySelect();
+populatePitchSelect();
+populateDurationSelect();
+
+titleInput.value = state.title;
+composerInput.value = state.composer;
+beatsSelect.value = String(state.beats);
+beatTypeSelect.value = String(state.beatType);
+keySelect.value = String(state.fifths);
+tempoInput.value = String(state.tempo);
+
+refreshAll();
+
+/* 调试钩子：便于自动化测试检查内部模型 */
+if(new URLSearchParams(location.search).has("debug")){
+
+    window.__builder = {
+        get state(){ return state; },
+        get selectedMeasure(){ return selectedMeasure; },
+        buildScoreXml,
+        saveScore,
+        addNote,
+        resetBuilder: () => resetBuilder(false),
+        get preview(){ return previewContainer.innerHTML.length; }
+    };
+}
+
+</script>
+
+</body>
+</html>
