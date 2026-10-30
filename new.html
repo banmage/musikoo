@@ -381,6 +381,113 @@ body{
     line-height:1.65;
 }
 
+.score-area{
+    flex:1 1 auto;
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+}
+
+/* =========================================================
+   谱面工具栏
+========================================================= */
+
+.score-toolbar{
+    flex:0 0 auto;
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:5px;
+    padding:7px 12px;
+    border-bottom:1px solid #e6ebf1;
+    background:#fbfdff;
+}
+
+.tool-group{
+    display:flex;
+    align-items:center;
+    gap:2px;
+    padding:3px;
+    border-radius:10px;
+    background:#f2f6fb;
+}
+
+.tool-btn{
+    width:34px;
+    height:34px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    border:1px solid transparent;
+    border-radius:8px;
+    background:transparent;
+    color:#33475d;
+    font:inherit;
+    font-size:1rem;
+    line-height:1;
+    cursor:pointer;
+    transition:background .12s ease, color .12s ease, box-shadow .12s ease;
+}
+
+.tool-btn:hover{
+    background:#e5eef8;
+}
+
+.tool-btn.active{
+    background:#2f5f9e;
+    border-color:#2f5f9e;
+    color:#fff;
+    box-shadow:0 2px 7px rgba(47,95,158,.28);
+}
+
+.tool-btn:disabled{
+    opacity:.35;
+    cursor:not-allowed;
+}
+
+.tool-symbol{
+    font-size:1.05rem;
+    line-height:1;
+}
+
+.tool-sep{
+    width:1px;
+    height:22px;
+    background:#e1e8f0;
+    margin:0 2px;
+}
+
+.tool-label{
+    color:#6f7d8c;
+    font-size:.68rem;
+    line-height:1.2;
+    padding:0 5px 0 2px;
+    white-space:nowrap;
+}
+
+.tool-state{
+    display:none;
+}
+
+/* 工具栏里的音符缩略图沿用 ghost 的造型，但取消绝对定位 */
+.tool-btn .note-glyph{
+    position:static;
+    left:auto;
+    top:auto;
+    width:22px;
+    height:28px;
+    overflow:visible;
+}
+
+.tool-btn .gn-head{
+    fill-opacity:.9;
+}
+
+.tool-history button{
+    font-size:1rem;
+}
+
 #previewWrapper{
     position:relative;
     flex:1 1 auto;
@@ -799,11 +906,6 @@ footer a{
                         </select>
                     </label>
 
-                    <label class="form-row">
-                        <span>调号</span>
-                        <select id="keySelect"></select>
-                    </label>
-
                 </div>
 
                 <label class="form-row">
@@ -843,19 +945,9 @@ footer a{
                     <span id="modeLabel">添加音符</span>
                 </div>
 
-                <div class="mode-switch">
-                    <button id="addModeBtn" type="button" class="active">✏️ 添加音符</button>
-                    <button id="selectModeBtn" type="button">🎯 选择移动</button>
-                </div>
-
                 <div class="mode-hint" id="modeHint">
-                    在五线谱上移动鼠标会出现淡粉色音符，左键落音；
-                    ＋/− 或 PgUp/PgDn 调整时值，Esc 退出添加模式。
-                </div>
-
-                <div class="history-row">
-                    <button id="undoBtn" type="button" disabled>↶ 撤销</button>
-                    <button id="redoBtn" type="button" disabled>↷ 重做</button>
+                    用谱面上方的工具栏选择音符 / 休止符与调号；
+                    在谱面上移动鼠标会出现预览，左键落音，Esc 退出添加模式。
                 </div>
 
             </div>
@@ -872,11 +964,6 @@ footer a{
                     </label>
 
                     <label class="form-row">
-                        <span>时值</span>
-                        <select id="durationSelect"></select>
-                    </label>
-
-                    <label class="form-row">
                         <span>声部</span>
                         <select id="voiceSelect">
                             <option value="1">声部 1 · 符干向上</option>
@@ -888,11 +975,6 @@ footer a{
                 </div>
 
                 <div class="toggle-row">
-                    <label title="插入休止符，不发声">
-                        <input type="checkbox" id="restToggle">
-                        休止符
-                    </label>
-
                     <label title="与上一个音同时发声；时值自动跟随上一个音">
                         <input type="checkbox" id="chordToggle">
                         和弦音
@@ -930,10 +1012,85 @@ footer a{
 
         </aside>
 
-        <div id="previewWrapper">
-            <div id="previewContainer">
-                <div class="preview-empty">正在生成预览…</div>
+        <div class="score-area">
+
+            <div class="score-toolbar" id="scoreToolbar" role="toolbar" aria-label="谱面编辑工具栏">
+
+                <div class="tool-group" aria-label="鼠标模式">
+                    <button id="selectModeBtn" class="tool-btn mode-tool" type="button"
+                            title="选择 / 拖动音符：上下拖动改变音高" aria-label="选择拖动">
+                        <span class="tool-symbol">✥</span>
+                    </button>
+                    <button id="addModeBtn" class="tool-btn mode-tool active" type="button"
+                            title="添加音符：十字光标" aria-label="添加音符">
+                        <span class="tool-symbol">✛</span>
+                    </button>
+                </div>
+
+                <div class="tool-sep"></div>
+
+                <div class="tool-group" id="durationTools" aria-label="音符时值">
+                    <button class="tool-btn dur-tool" type="button" data-dur="4" title="全音符"></button>
+                    <button class="tool-btn dur-tool" type="button" data-dur="2" title="二分音符"></button>
+                    <button class="tool-btn dur-tool active" type="button" data-dur="1" title="四分音符"></button>
+                    <button class="tool-btn dur-tool" type="button" data-dur="0.5" title="八分音符"></button>
+                    <button class="tool-btn dur-tool" type="button" data-dur="0.25" title="十六分音符"></button>
+                </div>
+
+                <div class="tool-group" id="restTools" aria-label="休止符">
+                    <button class="tool-btn rest-tool" type="button" data-dur="4" title="全休止符"></button>
+                    <button class="tool-btn rest-tool" type="button" data-dur="2" title="二分休止符"></button>
+                    <button class="tool-btn rest-tool" type="button" data-dur="1" title="四分休止符"></button>
+                    <button class="tool-btn rest-tool" type="button" data-dur="0.5" title="八分休止符"></button>
+                    <button class="tool-btn rest-tool" type="button" data-dur="0.25" title="十六分休止符"></button>
+                </div>
+
+                <div class="tool-sep"></div>
+
+                <div class="tool-group" id="keyTools" aria-label="调号">
+                    <button id="keyFlatBtn" class="tool-btn key-tool" type="button"
+                            title="增加一个降号">♭</button>
+                    <button id="keyNaturalBtn" class="tool-btn key-tool" type="button"
+                            title="还原为 C 大调 / a 小调">♮</button>
+                    <button id="keySharpBtn" class="tool-btn key-tool" type="button"
+                            title="增加一个升号">♯</button>
+                    <span class="tool-label" id="keyToolLabel"></span>
+                </div>
+
+                <div class="tool-sep"></div>
+
+                <div class="tool-group" id="markTools" aria-label="连接线与演奏记号">
+                    <button id="tieToolBtn" class="tool-btn mark-tool" type="button"
+                            title="连接线：连接选中的音符与后一个同音高音符">⌒</button>
+                    <button id="slurToolBtn" class="tool-btn mark-tool" type="button"
+                            title="圆滑线：连接选中的音符与后一个音符">‿</button>
+                    <button id="staccatoToolBtn" class="tool-btn mark-tool" type="button"
+                            title="断奏：给选中的音符加断奏点">•</button>
+                    <button id="accentToolBtn" class="tool-btn mark-tool" type="button"
+                            title="重音：给选中的音符加重音记号">›</button>
+                </div>
+
+                <div class="tool-group" aria-label="撤销与重做">
+                    <button id="undoBtn" class="tool-btn" type="button" disabled
+                            title="撤销 (Ctrl+Z)">↶</button>
+                    <button id="redoBtn" class="tool-btn" type="button" disabled
+                            title="重做 (Ctrl+Y)">↷</button>
+                </div>
+
+                <div class="tool-state" aria-hidden="true">
+                    <select id="keySelect" tabindex="-1"></select>
+                    <select id="durationSelect" tabindex="-1"></select>
+                    <input type="checkbox" id="restToggle">
+                </div>
+
             </div>
+
+            <div id="previewWrapper">
+                <div id="previewContainer">
+                    <div class="preview-empty">正在生成预览…</div>
+                </div>
+            </div>
+
         </div>
 
     </div>
@@ -1013,6 +1170,18 @@ const modeHint        = document.getElementById("modeHint");
 const undoBtn         = document.getElementById("undoBtn");
 const redoBtn         = document.getElementById("redoBtn");
 
+const scoreToolbar    = document.getElementById("scoreToolbar");
+const durationTools   = document.getElementById("durationTools");
+const restTools       = document.getElementById("restTools");
+const keyToolLabel    = document.getElementById("keyToolLabel");
+const keyFlatBtn      = document.getElementById("keyFlatBtn");
+const keyNaturalBtn   = document.getElementById("keyNaturalBtn");
+const keySharpBtn     = document.getElementById("keySharpBtn");
+const tieToolBtn      = document.getElementById("tieToolBtn");
+const slurToolBtn     = document.getElementById("slurToolBtn");
+const staccatoToolBtn = document.getElementById("staccatoToolBtn");
+const accentToolBtn   = document.getElementById("accentToolBtn");
+
 let state = createBlankState();
 let selectedMeasure = 0;
 let previewTimer = null;
@@ -1052,7 +1221,8 @@ function createBlankState(){
         beatType:4,
         fifths:0,
         tempo:96,
-        measures:[{ notes:[] }]
+        /* 新建曲谱默认给两个空白小节，写满最后一个小节时会再补两个 */
+        measures:[{ notes:[] }, { notes:[] }]
     };
 }
 
@@ -1172,6 +1342,80 @@ function populateDurationSelect(){
 
         durationSelect.appendChild(opt);
     });
+}
+
+/* 用和 ghost 相同的造型绘制工具栏图标 */
+function populateToolIcons(){
+
+    durationTools.querySelectorAll(".dur-tool").forEach(btn => {
+
+        const q = parseFloat(btn.dataset.dur);
+
+        const svg = createNoteGlyph(q, false);
+
+        svg.setAttribute(
+            "viewBox",
+            q === 4 ? "-8 -8 18 16" : "-8 -33 23 39"
+        );
+
+        btn.appendChild(svg);
+        btn.setAttribute(
+            "aria-label",
+            `${DURATION_NAMES[q] || formatQ(q) + " 拍"}音符`
+        );
+    });
+
+    restTools.querySelectorAll(".rest-tool").forEach(btn => {
+
+        const q = parseFloat(btn.dataset.dur);
+
+        const svg = createNoteGlyph(q, true);
+
+        svg.setAttribute("viewBox", "-9 -16 18 30");
+
+        btn.appendChild(svg);
+        btn.setAttribute(
+            "aria-label",
+            `${DURATION_NAMES[q] || formatQ(q) + " 拍"}休止符`
+        );
+    });
+}
+
+function selectedNote(){
+    return findNoteById(selectedNoteId)?.note || null;
+}
+
+function refreshToolbar(){
+
+    const add = editMode === "add";
+    const duration = currentDurQ();
+    const rest = restToggle.checked;
+
+    addModeBtn.classList.toggle("active", add);
+    selectModeBtn.classList.toggle("active", !add);
+
+    durationTools.querySelectorAll(".dur-tool").forEach(btn => {
+        btn.classList.toggle(
+            "active",
+            !rest && Math.abs(parseFloat(btn.dataset.dur) - duration) < 1e-6
+        );
+    });
+
+    restTools.querySelectorAll(".rest-tool").forEach(btn => {
+        btn.classList.toggle(
+            "active",
+            rest && Math.abs(parseFloat(btn.dataset.dur) - duration) < 1e-6
+        );
+    });
+
+    keyToolLabel.textContent = keyFifthsLabel(state.fifths);
+
+    const note = selectedNote();
+
+    tieToolBtn.classList.toggle("active", !!note?.tie);
+    slurToolBtn.classList.toggle("active", !!note?.slur);
+    staccatoToolBtn.classList.toggle("active", !!note?.staccato);
+    accentToolBtn.classList.toggle("active", !!note?.accent);
 }
 
 /* =========================================================
@@ -1366,6 +1610,139 @@ function buildScoreXml(){
 
     const measureQ = nominalQ();
 
+    /* 连接线 / 圆滑线：先算出每个记号的目标音符，再在输出时同时写 start 和 stop */
+    const tieMap = new Map();
+    const slurMap = new Map();
+    const tieStops = new Set();
+    const slurStops = new Set();
+
+    const markVoices = [...new Set(
+        state.measures
+            .flatMap(measure => measure.notes)
+            .filter(note => !note.rest)
+            .map(noteVoice)
+    )];
+
+    markVoices.forEach(voice => {
+
+        const list = [];
+
+        state.measures.forEach((measure, mi) => {
+
+            measure.notes.forEach(note => {
+
+                if(note.rest || noteVoice(note) !== voice) return;
+
+                list.push({
+                    note,
+                    mi,
+                    abs:mi * measureQ + (note.startQ || 0)
+                });
+            });
+        });
+
+        list.sort((a, b) => {
+
+            if(Math.abs(a.abs - b.abs) > 1e-6) return a.abs - b.abs;
+
+            return (a.note.chord ? 1 : 0) - (b.note.chord ? 1 : 0);
+        });
+
+        list.forEach((entry, index) => {
+
+            if(entry.note.tie){
+
+                const target = list.slice(index + 1).find(other =>
+                    Math.abs(other.abs - (entry.abs + entry.note.durQ)) < 1e-4 &&
+                    noteMidi(other.note) === noteMidi(entry.note)
+                );
+
+                if(target){
+                    tieMap.set(entry.note, target.note);
+                    tieStops.add(target.note);
+                }
+            }
+
+            if(entry.note.slur){
+
+                const target = list.slice(index + 1).find(
+                    other => other.abs > entry.abs + 1e-6
+                );
+
+                if(target){
+                    slurMap.set(entry.note, target.note);
+                    slurStops.add(target.note);
+                }
+            }
+        });
+    });
+
+    const appendNoteMarks = (noteEl, note) => {
+
+        if(note.rest) return;
+
+        const addTie = type => {
+
+            const tie = createEl(doc, "tie");
+
+            tie.setAttribute("type", type);
+
+            const voiceEl = noteEl.querySelector("voice");
+
+            if(voiceEl){
+                noteEl.insertBefore(tie, voiceEl);
+            }else{
+                noteEl.appendChild(tie);
+            }
+        };
+
+        if(tieMap.has(note)) addTie("start");
+        if(tieStops.has(note)) addTie("stop");
+
+        const notations = [];
+
+        const addTied = type => {
+
+            const tied = createEl(doc, "tied");
+
+            tied.setAttribute("type", type);
+            notations.push(tied);
+        };
+
+        if(tieMap.has(note)) addTied("start");
+        if(tieStops.has(note)) addTied("stop");
+
+        const addSlur = type => {
+
+            const slur = createEl(doc, "slur");
+
+            slur.setAttribute("type", type);
+            slur.setAttribute("number", "1");
+            notations.push(slur);
+        };
+
+        if(slurMap.has(note)) addSlur("start");
+        if(slurStops.has(note)) addSlur("stop");
+
+        if(note.staccato || note.accent){
+
+            const articulations = createEl(doc, "articulations");
+
+            if(note.staccato) articulations.appendChild(createEl(doc, "staccato"));
+            if(note.accent) articulations.appendChild(createEl(doc, "accent"));
+
+            notations.push(articulations);
+        }
+
+        if(notations.length){
+
+            const notationsEl = createEl(doc, "notations");
+
+            notations.forEach(el => notationsEl.appendChild(el));
+            noteEl.appendChild(notationsEl);
+        }
+    };
+
     state.measures.forEach((measure, mi) => {
 
         const measureEl = createEl(doc, "measure");
@@ -1549,6 +1926,8 @@ function buildScoreXml(){
                         if(multiVoice && !note.rest){
                             noteEl.appendChild(createEl(doc, "stem", stem));
                         }
+
+                        appendNoteMarks(noteEl, note);
 
                         measureEl.appendChild(noteEl);
                     });
@@ -1807,8 +2186,11 @@ function refreshMeter(){
 
     const chord = chordToggle.checked && !restToggle.checked;
 
+    const nextMeasureAvailable =
+        selectedMeasure < state.measures.length - 1 && used >= total - 1e-6;
+
     addNewNoteBtn.disabled =
-        !chord && used + duration > total + 1e-6;
+        !chord && used + duration > total + 1e-6 && !nextMeasureAvailable;
 
     pitchSelect.disabled = restToggle.checked;
     chordToggle.disabled = restToggle.checked;
@@ -2052,6 +2434,8 @@ function changeSelectedNoteDuration(direction){
         cutRests(measure, note.startQ, target, noteVoice(note));
     }
 
+    ensureTrailingBlankMeasures();
+
     setDurationValue(target);
 
     selectedNoteId = note.id;
@@ -2085,6 +2469,8 @@ function syncDurationFromSelection(){
     );
 
     setDurationValue(q);
+
+    refreshToolbar();
 }
 
 function voiceEndQ(measure, voice){
@@ -2095,6 +2481,295 @@ function voiceEndQ(measure, voice){
             : end,
         0
     );
+}
+
+/* =========================================================
+   小节增长与“插入时间”顺延
+========================================================= */
+
+function measureIsFull(measure){
+
+    return !!measure && measureEndQ(measure) >= nominalQ() - EPS;
+}
+
+/* 最后一个小节写满后，自动补两个空白小节 */
+function ensureTrailingBlankMeasures(){
+
+    let guard = 0;
+
+    while(guard++ < 200){
+
+        const last = state.measures[state.measures.length - 1];
+
+        if(!measureIsFull(last)) break;
+
+        state.measures.push({ notes:[] }, { notes:[] });
+    }
+}
+
+function noteContinuation(note, startQ, durQ){
+
+    return newNote({
+        rest:false,
+        chord:false,
+        voice:noteVoice(note),
+        startQ,
+        durQ,
+        step:note.step,
+        alter:note.alter || 0,
+        octave:note.octave
+    });
+}
+
+/* 在 mi 小节的 fromQ 处插入 amount 拍：后面的音符整体后移。
+   本小节放不下的部分顺延到下一小节，必要时继续往后传递。 */
+function propagateInsert(mi, voice, fromQ, amount, carried=[]){
+
+    while(state.measures.length <= mi){
+        state.measures.push({ notes:[] });
+    }
+
+    const measure = state.measures[mi];
+    const carriedSet = new Set(carried);
+
+    measure.notes.forEach(note => {
+
+        if(note.rest || noteVoice(note) !== voice) return;
+        if(carriedSet.has(note)) return;
+
+        if((note.startQ || 0) >= fromQ - EPS){
+            note.startQ = roundQ((note.startQ || 0) + amount);
+        }
+    });
+
+    if(carried.length) measure.notes.push(...carried);
+
+    const total = nominalQ();
+    const keep = [];
+    const nextCarried = [];
+
+    let nextAmount = 0;
+
+    measure.notes.forEach(note => {
+
+        if(note.rest || noteVoice(note) !== voice){
+            keep.push(note);
+            return;
+        }
+
+        const start = note.startQ || 0;
+        const end = start + note.durQ;
+
+        if(start >= total - EPS){
+
+            /* 整个音符被推到下一小节 */
+            note.startQ = roundQ(Math.max(0, start - total));
+
+            nextCarried.push(note);
+            nextAmount = Math.max(nextAmount, note.startQ + note.durQ);
+
+        }else if(end > total + EPS){
+
+            /* 跨过小节线的音符拆成两个并用连接线连起来 */
+            const tailDur = roundQ(end - total);
+
+            note.durQ = roundQ(total - start);
+            note.tie = true;
+
+            const tail = noteContinuation(note, 0, tailDur);
+
+            nextCarried.push(tail);
+            nextAmount = Math.max(nextAmount, tailDur);
+
+            keep.push(note);
+
+        }else{
+
+            keep.push(note);
+        }
+    });
+
+    /* 超出本小节的休止符直接丢弃；结尾空出来的时间会由隐式休止符补齐 */
+    measure.notes = keep.filter(note => {
+
+        if(!note.rest || noteVoice(note) !== voice) return true;
+
+        return (note.startQ || 0) < total - EPS;
+    });
+
+    if(nextCarried.length){
+        propagateInsert(mi + 1, voice, 0, roundQ(nextAmount), nextCarried);
+    }
+}
+
+/* 插入/顺延后，把与音符重叠的显式休止符删掉；剩余空隙由小节自动补休止符 */
+function normalizeVoiceRests(fromMi, voice){
+
+    const total = nominalQ();
+
+    for(let mi = fromMi; mi < state.measures.length; mi++){
+
+        const measure = state.measures[mi];
+
+        const intervals = measure.notes
+            .filter(note => !note.rest && noteVoice(note) === voice)
+            .map(note => [
+                Math.max(0, note.startQ || 0),
+                Math.min(total, (note.startQ || 0) + note.durQ)
+            ])
+            .filter(([a, b]) => b > a + EPS)
+            .sort((a, b) => a[0] - b[0]);
+
+        const merged = [];
+
+        intervals.forEach(interval => {
+
+            const last = merged[merged.length - 1];
+
+            if(last && interval[0] <= last[1] + EPS){
+                last[1] = Math.max(last[1], interval[1]);
+            }else{
+                merged.push(interval.slice());
+            }
+        });
+
+        measure.notes = measure.notes.filter(note => {
+
+            if(!note.rest || noteVoice(note) !== voice) return true;
+
+            const start = note.startQ || 0;
+
+            if(start >= total - EPS) return false;
+
+            const end = start + note.durQ;
+
+            const overlapsNote = merged.some(
+                ([a, b]) => start < b - EPS && end > a + EPS
+            );
+
+            if(overlapsNote) return false;
+
+            if(end > total + EPS){
+                note.durQ = roundQ(total - start);
+            }
+
+            return note.durQ > EPS;
+        });
+    }
+}
+
+function insertTimeBeforeNote(mi, q, durQ, voice){
+
+    propagateInsert(mi, voice, q, durQ);
+    normalizeVoiceRests(mi, voice);
+}
+
+/* =========================================================
+   连接线 / 圆滑线 / 演奏记号
+========================================================= */
+
+function absoluteNoteStart(mi, note){
+
+    return mi * nominalQ() + (note.startQ || 0);
+}
+
+function orderedVoiceNotes(voice){
+
+    const list = [];
+
+    state.measures.forEach((measure, mi) => {
+
+        measure.notes.forEach(note => {
+
+            if(note.rest || noteVoice(note) !== voice) return;
+
+            list.push({
+                note,
+                mi,
+                abs:absoluteNoteStart(mi, note)
+            });
+        });
+    });
+
+    return list.sort((a, b) => {
+
+        if(Math.abs(a.abs - b.abs) > EPS) return a.abs - b.abs;
+
+        return (a.note.chord ? 1 : 0) - (b.note.chord ? 1 : 0);
+    });
+}
+
+function findTieTarget(found){
+
+    const mi = state.measures.indexOf(found.measure);
+    const list = orderedVoiceNotes(noteVoice(found.note));
+    const endAbs = absoluteNoteStart(mi, found.note) + found.note.durQ;
+
+    return list.find(entry =>
+        entry.note !== found.note &&
+        !entry.note.chord &&
+        Math.abs(entry.abs - endAbs) < 1e-4 &&
+        noteMidi(entry.note) === noteMidi(found.note)
+    ) || null;
+}
+
+function findSlurTarget(found){
+
+    const mi = state.measures.indexOf(found.measure);
+    const list = orderedVoiceNotes(noteVoice(found.note));
+    const startAbs = absoluteNoteStart(mi, found.note);
+
+    return list.find(entry =>
+        entry.note !== found.note &&
+        entry.abs > startAbs + EPS
+    ) || null;
+}
+
+function toggleNoteMark(kind){
+
+    const found = selectedNoteId == null ? null : findNoteById(selectedNoteId);
+
+    if(!found || found.note.rest){
+        notify("请先在谱面上选中一个音符。", true);
+        return false;
+    }
+
+    const note = found.note;
+
+    if(kind === "tie" && !note.tie && !findTieTarget(found)){
+        notify("后面没有紧接的同音高音符，无法添加连接线。", true);
+        return false;
+    }
+
+    if(kind === "slur" && !note.slur && !findSlurTarget(found)){
+        notify("后面没有可以连接的音符。", true);
+        return false;
+    }
+
+    const before = snapshotState();
+
+    if(kind === "tie"){
+        note.tie = !note.tie;
+    }else if(kind === "slur"){
+        note.slur = !note.slur;
+    }else{
+        note[kind] = !note[kind];
+    }
+
+    commitHistory(before);
+    refreshAll();
+
+    notify(
+        kind === "tie"
+            ? (note.tie ? "已添加连接线。" : "已移除连接线。")
+            : kind === "slur"
+                ? (note.slur ? "已添加圆滑线。" : "已移除圆滑线。")
+                : kind === "staccato"
+                    ? (note.staccato ? "已添加断奏记号。" : "已移除断奏记号。")
+                    : (note.accent ? "已添加重音记号。" : "已移除重音记号。")
+    );
+
+    return true;
 }
 
 function notify(text, isError=false){
@@ -2108,7 +2783,9 @@ function notify(text, isError=false){
 
 function addNote(){
 
-    const measure = currentMeasure();
+    const before = snapshotState();
+
+    let measure = currentMeasure();
     const voice = currentVoice();
 
     const rest = restToggle.checked;
@@ -2136,16 +2813,29 @@ function addNote(){
     }
     else if(q + durQ > nominalQ() + 1e-6){
 
-        notify(
-            `声部 ${voice} 只剩 ${formatQ(Math.max(0, nominalQ() - q))} 拍，` +
-            `放不下 ${formatQ(durQ)} 拍。可以缩短时值或新增一小节。`,
-            true
-        );
-        return;
+        /* 当前小节已经写满时，自动进入后面的空白小节 */
+        if(q >= nominalQ() - 1e-6){
+
+            if(selectedMeasure >= state.measures.length - 1){
+                state.measures.push({ notes:[] }, { notes:[] });
+            }
+
+            selectedMeasure++;
+            measure = currentMeasure();
+            q = voiceEndQ(measure, voice);
+
+        }else{
+
+            notify(
+                `声部 ${voice} 只剩 ${formatQ(Math.max(0, nominalQ() - q))} 拍，` +
+                `放不下 ${formatQ(durQ)} 拍。可以缩短时值或新增一小节。`,
+                true
+            );
+            return;
+        }
     }
 
     const midi = parseInt(pitchSelect.value, 10) || 60;
-    const before = snapshotState();
 
     const note = rest
         ? newNote({ rest:true, durQ, startQ:q, chord:false, voice })
@@ -2160,6 +2850,8 @@ function addNote(){
 
     measure.notes.push(note);
     sortMeasureNotes(measure);
+
+    ensureTrailingBlankMeasures();
 
     selectedNoteId = rest ? null : note.id;
 
@@ -2220,10 +2912,23 @@ function placementAt(mi, q, durQ, midi, rest, voice=1){
         return { valid:false, error:"落点超出小节开头。" };
     }
 
+    if(q + durQ > total + EPS){
+        return {
+            valid:true,
+            chord:false,
+            voice,
+            durQ,
+            error:"超出小节末尾。",
+            overflow:true
+        };
+    }
+
     if(measure){
+
         const group = notesAtStart(measure, q, voice);
 
-        if(!rest && group.length){
+        /* 勾选“和弦音”时，在同一拍上叠音；否则在音符前插入并让原音符后移 */
+        if(!rest && group.length && chordToggle.checked){
 
             if(group.some(n => noteMidi(n) === midi)){
                 return { valid:false, error:"这个位置已经有相同音高了。" };
@@ -2243,31 +2948,28 @@ function placementAt(mi, q, durQ, midi, rest, voice=1){
                 error:null
             };
         }
-    }
 
-    if(q + durQ > total + EPS){
-        return {
-            valid:true,
-            chord:false,
-            voice,
-            durQ,
-            error:"超出小节末尾。",
-            overflow:true
-        };
-    }
+        if(rest && group.length){
+            return {
+                valid:false,
+                error:"这一拍已经有音符；要插入休止符，请选择空白位置。"
+            };
+        }
 
-    const blocking = measure?.notes.find(n =>
-        !n.rest &&
-        noteVoice(n) === voice &&
-        n.startQ < q + durQ - EPS &&
-        n.startQ + n.durQ > q + EPS
-    );
+        /* 不能落在一个正在延音的音符中间，否则无法决定是拆音还是后移 */
+        const covering = measure.notes.find(note =>
+            !note.rest &&
+            noteVoice(note) === voice &&
+            (note.startQ || 0) < q - EPS &&
+            (note.startQ || 0) + note.durQ > q + EPS
+        );
 
-    if(blocking){
-        return {
-            valid:false,
-            error:`声部 ${voice} 的这一拍已被占用。先右键把原音符删除为休止符，再重新落音。`
-        };
+        if(covering){
+            return {
+                valid:false,
+                error:"这个位置在一个延音音符中间，请对准音符起点或后面的空白处。"
+            };
+        }
     }
 
     return { valid:true, chord:false, voice, durQ, error:null };
@@ -2357,33 +3059,44 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
 
         measure.notes.push(note);
 
-    }else{
+    }else if(rest){
 
         cutRests(measure, q, info.durQ, voice);
 
-        note = rest
-            ? newNote({
-                rest:true,
-                voice,
-                chord:false,
-                startQ:q,
-                durQ:info.durQ
-            })
-            : newNote({
-                rest:false,
-                voice,
-                chord:false,
-                startQ:q,
-                durQ:info.durQ,
-                step:pitch.step,
-                alter:pitch.alter,
-                octave:pitch.octave
-            });
+        note = newNote({
+            rest:true,
+            voice,
+            chord:false,
+            startQ:q,
+            durQ:info.durQ
+        });
+
+        measure.notes.push(note);
+
+    }else{
+
+        /* 在音符前插入：后面的音符顺延，多余的时值从后续休止符里扣除 */
+        insertTimeBeforeNote(mi, q, info.durQ, voice);
+
+        note = newNote({
+            rest:false,
+            voice,
+            chord:false,
+            startQ:q,
+            durQ:info.durQ,
+            step:pitch.step,
+            alter:pitch.alter,
+            octave:pitch.octave
+        });
 
         measure.notes.push(note);
     }
 
-    sortMeasureNotes(measure);
+    for(let index = mi; index < state.measures.length; index++){
+        sortMeasureNotes(state.measures[index]);
+    }
+
+    ensureTrailingBlankMeasures();
 
     selectedNoteId = rest ? null : note.id;
     selectedMeasure = mi;
@@ -3744,14 +4457,13 @@ function refreshModeUI(){
 
     const add = editMode === "add";
 
-    addModeBtn.classList.toggle("active", add);
-    selectModeBtn.classList.toggle("active", !add);
+    refreshToolbar();
 
     modeLabel.textContent = add ? "添加音符" : "选择移动";
 
     modeHint.textContent = add
-        ? "在五线谱上移动鼠标会出现淡粉色音符，左键落音后试听；" +
-          "＋/− 或 PgUp/PgDn 调整时值，Esc 退出添加模式。"
+        ? "工具栏可直接切换音符 / 休止符形状；在谱面上移动鼠标会出现预览，" +
+          "左键落音后试听，后面的音符会自动顺延。Esc 退出添加模式。"
         : "点击谱面上的音符选中；上下拖动按半音改变音高并试听；" +
           "右键删除；＋/− 或 PgUp/PgDn 调整所选音符时值。";
 
@@ -3840,6 +4552,83 @@ addModeBtn.addEventListener("click", () => setEditMode("add"));
 
 selectModeBtn.addEventListener("click", () => setEditMode("select"));
 
+/* 工具栏：点音符 / 休止符图标，直接切换到对应形状的落音状态 */
+function chooseNoteTool(durQ, rest){
+
+    durationSelect.value = String(durQ);
+    restToggle.checked = rest;
+
+    if(rest) chordToggle.checked = false;
+
+    refreshMeter();
+    setEditMode("add");
+    refreshGhostFromHover();
+}
+
+durationTools.querySelectorAll(".dur-tool").forEach(btn => {
+    btn.addEventListener("click", () => {
+        chooseNoteTool(parseFloat(btn.dataset.dur), false);
+    });
+});
+
+restTools.querySelectorAll(".rest-tool").forEach(btn => {
+    btn.addEventListener("click", () => {
+        chooseNoteTool(parseFloat(btn.dataset.dur), true);
+    });
+});
+
+function stepKeyFifths(delta){
+
+    const next = Math.max(-7, Math.min(7, state.fifths + delta));
+
+    if(next === state.fifths){
+        notify(
+            delta > 0
+                ? "调号已经不能再增加升号了。"
+                : "调号已经不能再增加降号了。",
+            true
+        );
+        return;
+    }
+
+    const before = snapshotState();
+
+    state.fifths = next;
+    keySelect.value = String(next);
+
+    commitHistory(before);
+    refreshAll();
+
+    notify(`调号已改为 ${keyFifthsLabel(next)}。`);
+}
+
+keySharpBtn.addEventListener("click", () => stepKeyFifths(1));
+
+keyFlatBtn.addEventListener("click", () => stepKeyFifths(-1));
+
+keyNaturalBtn.addEventListener("click", () => {
+
+    if(state.fifths === 0) return;
+
+    const before = snapshotState();
+
+    state.fifths = 0;
+    keySelect.value = "0";
+
+    commitHistory(before);
+    refreshAll();
+
+    notify("调号已还原为 C 大调 / a 小调。");
+});
+
+tieToolBtn.addEventListener("click", () => toggleNoteMark("tie"));
+
+slurToolBtn.addEventListener("click", () => toggleNoteMark("slur"));
+
+staccatoToolBtn.addEventListener("click", () => toggleNoteMark("staccato"));
+
+accentToolBtn.addEventListener("click", () => toggleNoteMark("accent"));
+
 undoBtn.addEventListener("click", undoScore);
 
 redoBtn.addEventListener("click", redoScore);
@@ -3874,6 +4663,7 @@ keySelect.addEventListener("change", () => {
 
     state.fifths = parseInt(keySelect.value, 10) || 0;
     refreshNoteList();
+    refreshToolbar();
     schedulePreview();
 });
 
@@ -3955,6 +4745,7 @@ restToggle.addEventListener("change", () => {
     if(restToggle.checked) chordToggle.checked = false;
 
     refreshMeter();
+    refreshToolbar();
     refreshGhostFromHover();
 });
 
@@ -3963,6 +4754,7 @@ chordToggle.addEventListener("change", () => {
     if(chordToggle.checked) restToggle.checked = false;
 
     refreshMeter();
+    refreshToolbar();
     refreshGhostFromHover();
 });
 
@@ -3971,6 +4763,7 @@ voiceSelect.addEventListener("change", refreshGhostFromHover);
 durationSelect.addEventListener("change", () => {
 
     refreshMeter();
+    refreshToolbar();
     refreshGhostFromHover();
 });
 
@@ -4082,6 +4875,7 @@ initFeatureNav("new.html");
 populateKeySelect();
 populatePitchSelect();
 populateDurationSelect();
+populateToolIcons();
 
 titleInput.value = state.title;
 composerInput.value = state.composer;
