@@ -185,6 +185,14 @@ body{
     flex:0 0 auto;
 }
 
+#clefGrid.single-staff{
+    grid-template-columns:1fr;
+}
+
+#clefGrid.single-staff .form-row:nth-child(2){
+    display:none;
+}
+
 .measure-bar{
     display:flex;
     align-items:center;
@@ -464,6 +472,28 @@ body{
     line-height:1.2;
     padding:0 5px 0 2px;
     white-space:nowrap;
+}
+
+.tool-select{
+    height:32px;
+    max-width:150px;
+    padding:0 6px;
+    border:1px solid transparent;
+    border-radius:8px;
+    background:transparent;
+    color:#33475d;
+    font:inherit;
+    font-size:.72rem;
+    cursor:pointer;
+}
+
+.tool-select:hover{
+    background:#e5eef8;
+}
+
+.tool-select:focus{
+    outline:2px solid rgba(47,95,158,.28);
+    outline-offset:1px;
 }
 
 .tool-state{
@@ -919,6 +949,54 @@ footer a{
             <div class="form-section">
 
                 <div class="section-title">
+                    乐器与谱表
+                    <span id="partCounter"></span>
+                </div>
+
+                <label class="form-row">
+                    <span>名称</span>
+                    <input id="partNameInput" type="text" maxlength="40" value="Piano">
+                </label>
+
+                <label class="form-row">
+                    <span>音色</span>
+                    <select id="instrumentSelect"></select>
+                </label>
+
+                <label class="form-row">
+                    <span>谱表</span>
+                    <select id="staffCountSelect">
+                        <option value="1">单谱表</option>
+                        <option value="2">大谱表（钢琴 / 双手）</option>
+                    </select>
+                </label>
+
+                <div class="form-grid" id="clefGrid">
+                    <label class="form-row">
+                        <span>谱表 1</span>
+                        <select id="clefSelect0"></select>
+                    </label>
+                    <label class="form-row">
+                        <span>谱表 2</span>
+                        <select id="clefSelect1"></select>
+                    </label>
+                </div>
+
+                <div class="builder-actions">
+                    <button id="addPartBtn" type="button">＋ 乐器</button>
+                    <button id="removePartBtn" type="button">删除乐器</button>
+                </div>
+
+                <div class="builder-hint">
+                    每个乐器可有一条或两条谱表；钢琴选“大谱表”后，
+                    高音谱表通常写右手、低音谱表写左手，声部 1 / 2 可独立记谱。
+                </div>
+
+            </div>
+
+            <div class="form-section">
+
+                <div class="section-title">
                     小节
                     <span id="measureCounter"></span>
                 </div>
@@ -961,15 +1039,6 @@ footer a{
                     <label class="form-row">
                         <span>音高</span>
                         <select id="pitchSelect"></select>
-                    </label>
-
-                    <label class="form-row">
-                        <span>声部</span>
-                        <select id="voiceSelect">
-                            <option value="1">声部 1 · 符干向上</option>
-                            <option value="2">声部 2 · 符干向下</option>
-                            <option value="3">声部 3 · 符干向上</option>
-                        </select>
                     </label>
 
                 </div>
@@ -1025,6 +1094,19 @@ footer a{
                             title="添加音符：十字光标" aria-label="添加音符">
                         <span class="tool-symbol">✛</span>
                     </button>
+                </div>
+
+                <div class="tool-sep"></div>
+
+                <div class="tool-group" id="contextTools" aria-label="乐器、谱表与声部">
+                    <select id="partSelect" class="tool-select" title="当前乐器"></select>
+                    <select id="staffSelect" class="tool-select" title="当前谱表"></select>
+                    <select id="voiceSelect" class="tool-select" title="当前声部">
+                        <option value="1">声部 1</option>
+                        <option value="2">声部 2</option>
+                        <option value="3">声部 3</option>
+                        <option value="4">声部 4</option>
+                    </select>
                 </div>
 
                 <div class="tool-sep"></div>
@@ -1182,16 +1264,32 @@ const slurToolBtn     = document.getElementById("slurToolBtn");
 const staccatoToolBtn = document.getElementById("staccatoToolBtn");
 const accentToolBtn   = document.getElementById("accentToolBtn");
 
+const partSelect       = document.getElementById("partSelect");
+const staffSelect      = document.getElementById("staffSelect");
+const partCounter      = document.getElementById("partCounter");
+const partNameInput    = document.getElementById("partNameInput");
+const instrumentSelect = document.getElementById("instrumentSelect");
+const staffCountSelect = document.getElementById("staffCountSelect");
+const clefSelect0      = document.getElementById("clefSelect0");
+const clefSelect1      = document.getElementById("clefSelect1");
+const clefGrid         = document.getElementById("clefGrid");
+const addPartBtn       = document.getElementById("addPartBtn");
+const removePartBtn    = document.getElementById("removePartBtn");
+
 let state = createBlankState();
 let selectedMeasure = 0;
+let selectedPartId = state.parts[0].id;
+let selectedStaff = 0;
+let nextPartId = 2;
 let previewTimer = null;
 let previewToken = 0;
 
 /* 谱面编辑状态 */
 let editMode = "add";                 // add | select
 let osmdInstance = null;
-let measureGeoms = [];                // 与小节索引对齐的谱面几何
-let noteHandles = [];                 // { note, mi, el, cx, cy }
+let measureGeoms = [];                // 与小节索引对齐的主谱表几何（兼容旧测试）
+let staffGeoms = [];                  // staffGeoms[mi][staffSlot]：所有乐器的所有谱表
+let noteHandles = [];                 // { note, mi, el, cx, cy, geom }
 let selectedNoteId = null;
 let nextNoteId = 1;
 let undoStack = [];
@@ -1207,6 +1305,84 @@ let lastAuditionMidi = null;
 const TREBLE_BOTTOM_DIATONIC = 30;    // E4：高音谱号底线
 const STEP_PX = 5;                    // 一个线/间（全音级）的 SVG 像素
 
+/* 谱号：底线对应的全音级（C0 = 0） */
+const CLEF_DEFS = {
+    treble:{ label:"高音谱表", sign:"G", line:2, bottom:30 },
+    bass:  { label:"低音谱表", sign:"F", line:4, bottom:18 },
+    alto:  { label:"中音谱表", sign:"C", line:3, bottom:24 },
+    tenor: { label:"次中音谱表", sign:"C", line:4, bottom:22 }
+};
+
+/* General MIDI 音色编号（1–128），与 MusicXML midi-program 一致 */
+const INSTRUMENTS = [
+    { program:1,   name:"钢琴" },
+    { program:2,   name:"明亮钢琴" },
+    { program:3,   name:"电钢琴" },
+    { program:4,   name:"酒吧钢琴" },
+    { program:5,   name:"电钢琴 1" },
+    { program:6,   name:"电钢琴 2" },
+    { program:7,   name:"羽管键琴" },
+    { program:9,   name:"钢片琴" },
+    { program:10,  name:"钟琴" },
+    { program:11,  name:"八音盒" },
+    { program:12,  name:"颤音琴" },
+    { program:13,  name:"马林巴" },
+    { program:14,  name:"木琴" },
+    { program:15,  name:"管钟" },
+    { program:17,  name:"拉杆风琴" },
+    { program:19,  name:"摇滚风琴" },
+    { program:20,  name:"管风琴" },
+    { program:21,  name:"簧风琴" },
+    { program:22,  name:"手风琴" },
+    { program:23,  name:"口琴" },
+    { program:25,  name:"尼龙弦吉他" },
+    { program:26,  name:"钢弦吉他" },
+    { program:27,  name:"爵士电吉他" },
+    { program:28,  name:"清音电吉他" },
+    { program:29,  name:"闷音电吉他" },
+    { program:30,  name:"过载吉他" },
+    { program:31,  name:"失真吉他" },
+    { program:33,  name:"原声贝斯" },
+    { program:34,  name:"指弹电贝斯" },
+    { program:35,  name:"拨片电贝斯" },
+    { program:36,  name:"无品贝斯" },
+    { program:41,  name:"小提琴" },
+    { program:42,  name:"中提琴" },
+    { program:43,  name:"大提琴" },
+    { program:44,  name:"低音提琴" },
+    { program:45,  name:"弦乐颤音" },
+    { program:46,  name:"拨弦弦乐" },
+    { program:47,  name:"竖琴" },
+    { program:48,  name:"定音鼓" },
+    { program:49,  name:"弦乐合奏" },
+    { program:50,  name:"弦乐合奏 2" },
+    { program:53,  name:"人声“啊”" },
+    { program:54,  name:"人声“哦”" },
+    { program:57,  name:"小号" },
+    { program:58,  name:"长号" },
+    { program:59,  name:"大号" },
+    { program:60,  name:"弱音小号" },
+    { program:61,  name:"圆号" },
+    { program:62,  name:"铜管合奏" },
+    { program:65,  name:"高音萨克斯" },
+    { program:66,  name:"中音萨克斯" },
+    { program:67,  name:"次中音萨克斯" },
+    { program:68,  name:"上低音萨克斯" },
+    { program:69,  name:"双簧管" },
+    { program:70,  name:"英国管" },
+    { program:71,  name:"大管" },
+    { program:72,  name:"单簧管" },
+    { program:73,  name:"短笛" },
+    { program:74,  name:"长笛" },
+    { program:75,  name:"竖笛" },
+    { program:76,  name:"排箫" },
+    { program:105, name:"西塔琴" },
+    { program:106, name:"班卓琴" },
+    { program:107, name:"三味线" },
+    { program:108, name:"日本筝" },
+    { program:109, name:"卡林巴" }
+];
+
 
 /* =========================================================
    状态构造
@@ -1221,6 +1397,15 @@ function createBlankState(){
         beatType:4,
         fifths:0,
         tempo:96,
+        /* 每个乐器有 1–2 条谱表；音符通过 part / staff 归属到具体谱表 */
+        parts:[
+            {
+                id:"P1",
+                name:"Piano",
+                program:1,
+                staves:[{ clef:"treble" }]
+            }
+        ],
         /* 新建曲谱默认给两个空白小节，写满最后一个小节时会再补两个 */
         measures:[{ notes:[] }, { notes:[] }]
     };
@@ -1230,12 +1415,97 @@ function nominalQ(){
     return state.beats * (4 / state.beatType);
 }
 
-function measureEndQ(measure){
+function partById(id){
 
-    return measure.notes.reduce(
-        (end, note) => Math.max(end, (note.startQ || 0) + note.durQ),
-        0
-    );
+    return state.parts.find(part => part.id === id) || state.parts[0] || null;
+}
+
+function activePart(){
+    return partById(selectedPartId);
+}
+
+function activePartId(){
+    return activePart()?.id || "P1";
+}
+
+function activeStaffIndex(){
+
+    const part = activePart();
+    const count = part?.staves?.length || 1;
+
+    return Math.max(0, Math.min(selectedStaff | 0, count - 1));
+}
+
+function staffDef(partId, staffIndex=0){
+
+    const part = partById(partId);
+
+    return part?.staves?.[staffIndex] || { clef:"treble" };
+}
+
+function clefBottomDiatonic(clef){
+    return (CLEF_DEFS[clef] || CLEF_DEFS.treble).bottom;
+}
+
+function staffBottomDiatonic(partId, staffIndex=0){
+    return clefBottomDiatonic(staffDef(partId, staffIndex).clef);
+}
+
+function notePartId(note){
+    return note?.part || state.parts[0]?.id || "P1";
+}
+
+function noteStaffIndex(note){
+    return Math.max(0, note?.staff | 0);
+}
+
+function sameNoteContext(note, partId, staffIndex){
+
+    return notePartId(note) === partId &&
+        noteStaffIndex(note) === staffIndex;
+}
+
+function noteContextKey(note){
+    return `${notePartId(note)}|${noteStaffIndex(note)}|${noteVoice(note)}`;
+}
+
+function instrumentName(program){
+
+    return INSTRUMENTS.find(item => item.program === program)?.name ||
+        `乐器 ${program}`;
+}
+
+/* MIDI 第 10 通道固定是打击乐，旋律乐器依次跳过它 */
+const MIDI_CHANNELS = [1,2,3,4,5,6,7,8,9,11,12,13,14,15,16];
+
+function partMidiChannel(index){
+    return MIDI_CHANNELS[index % MIDI_CHANNELS.length];
+}
+
+function staffLabel(partId, staffIndex=0){
+
+    const part = partById(partId);
+
+    if(!part) return "";
+
+    const def = CLEF_DEFS[staffDef(partId, staffIndex).clef] ||
+        CLEF_DEFS.treble;
+
+    return part.staves.length > 1
+        ? `谱表 ${staffIndex + 1} · ${def.label}`
+        : def.label;
+}
+
+function measureEndQ(measure, partId=null, staffIndex=null){
+
+    return measure.notes.reduce((end, note) => {
+
+        if(partId != null && notePartId(note) !== partId) return end;
+        if(staffIndex != null && noteStaffIndex(note) !== staffIndex) return end;
+
+        return Math.max(end, (note.startQ || 0) + note.durQ);
+
+    }, 0);
 }
 
 function noteMidi(note){
@@ -1271,6 +1541,14 @@ function sortMeasureNotes(measure){
             return (a.startQ || 0) - (b.startQ || 0);
         }
 
+        if(notePartId(a) !== notePartId(b)){
+            return notePartId(a).localeCompare(notePartId(b));
+        }
+
+        if(noteStaffIndex(a) !== noteStaffIndex(b)){
+            return noteStaffIndex(a) - noteStaffIndex(b);
+        }
+
         return (a.chord ? 1 : 0) - (b.chord ? 1 : 0);
     });
 }
@@ -1283,6 +1561,8 @@ function newNote(data){
         durQ: 1,
         rest: false,
         chord: false,
+        part: data.part ?? activePartId(),
+        staff: data.staff ?? activeStaffIndex(),
         ...data
     };
 }
@@ -1342,6 +1622,257 @@ function populateDurationSelect(){
 
         durationSelect.appendChild(opt);
     });
+}
+
+function populateInstrumentSelect(){
+
+    instrumentSelect.innerHTML = "";
+
+    INSTRUMENTS.forEach(item => {
+
+        const opt = document.createElement("option");
+
+        opt.value = String(item.program);
+        opt.textContent = `${item.name}（${item.program}）`;
+
+        instrumentSelect.appendChild(opt);
+    });
+}
+
+function populateClefSelect(select){
+
+    select.innerHTML = "";
+
+    Object.entries(CLEF_DEFS).forEach(([key, def]) => {
+
+        const opt = document.createElement("option");
+
+        opt.value = key;
+        opt.textContent = def.label;
+
+        select.appendChild(opt);
+    });
+}
+
+function populatePartSelect(){
+
+    partSelect.innerHTML = "";
+
+    state.parts.forEach((part, index) => {
+
+        const opt = document.createElement("option");
+
+        opt.value = part.id;
+        opt.textContent = `${index + 1}. ${part.name}`;
+
+        partSelect.appendChild(opt);
+    });
+
+    partSelect.value = activePartId();
+    partCounter.textContent = `共 ${state.parts.length} 个乐器`;
+}
+
+function populateStaffSelect(){
+
+    const part = activePart();
+
+    staffSelect.innerHTML = "";
+
+    if(!part) return;
+
+    part.staves.forEach((staff, index) => {
+
+        const opt = document.createElement("option");
+
+        opt.value = String(index);
+        opt.textContent = part.staves.length > 1
+            ? `谱表 ${index + 1} · ${(CLEF_DEFS[staff.clef] || CLEF_DEFS.treble).label}`
+            : (CLEF_DEFS[staff.clef] || CLEF_DEFS.treble).label;
+
+        staffSelect.appendChild(opt);
+    });
+
+    staffSelect.value = String(activeStaffIndex());
+}
+
+/* 把当前乐器 / 谱表的设置同步到左侧面板与工具栏 */
+function syncPartUI(){
+
+    const part = activePart();
+
+    if(!part) return;
+
+    selectedPartId = part.id;
+    selectedStaff = activeStaffIndex();
+
+    populatePartSelect();
+    populateStaffSelect();
+
+    partNameInput.value = part.name;
+    instrumentSelect.value = String(part.program);
+    staffCountSelect.value = String(part.staves.length);
+
+    clefSelect0.value = part.staves[0]?.clef || "treble";
+    clefSelect0.disabled = part.staves.length < 1;
+    clefSelect1.value = part.staves[1]?.clef || "bass";
+    clefSelect1.disabled = part.staves.length < 2;
+
+    clefGrid.classList.toggle("single-staff", part.staves.length < 2);
+    removePartBtn.disabled = state.parts.length <= 1;
+}
+
+function recomputeNextPartId(){
+
+    let max = 0;
+
+    state.parts.forEach(part => {
+
+        const match = /^P(\d+)$/.exec(part.id);
+
+        if(match) max = Math.max(max, parseInt(match[1], 10));
+    });
+
+    nextPartId = max + 1;
+}
+
+function setActiveContext(partId, staffIndex = 0){
+
+    if(!partById(partId)) return;
+
+    selectedPartId = partId;
+    selectedStaff = Math.max(0, staffIndex | 0);
+    selectedNoteId = null;
+
+    syncPartUI();
+    refreshAll();
+}
+
+function addPart(){
+
+    const before = snapshotState();
+
+    const id = `P${nextPartId++}`;
+    const name = `乐器 ${state.parts.length + 1}`;
+    const part = {
+        id,
+        name,
+        program:1,
+        staves:[{ clef:"treble" }]
+    };
+
+    state.parts.push(part);
+
+    selectedPartId = id;
+    selectedStaff = 0;
+    selectedNoteId = null;
+
+    commitHistory(before);
+
+    syncPartUI();
+    refreshAll();
+
+    notify(`已新增 ${name}。可以在左侧设置它的音色和谱表数量。`);
+}
+
+function removeActivePart(){
+
+    if(state.parts.length <= 1){
+
+        notify("至少要保留一个乐器。", true);
+        return;
+    }
+
+    const part = activePart();
+
+    if(!part) return;
+
+    const before = snapshotState();
+
+    state.parts = state.parts.filter(item => item.id !== part.id);
+
+    state.measures.forEach(measure => {
+
+        measure.notes = measure.notes.filter(
+            note => notePartId(note) !== part.id
+        );
+    });
+
+    selectedPartId = state.parts[0].id;
+    selectedStaff = 0;
+    selectedNoteId = null;
+
+    recomputeNextPartId();
+
+    commitHistory(before);
+
+    syncPartUI();
+    refreshAll();
+
+    notify(`已删除 ${part.name} 及其音符。`);
+}
+
+function setPartStaffCount(count){
+
+    const part = activePart();
+
+    if(!part) return;
+
+    count = count >= 2 ? 2 : 1;
+
+    if(count === part.staves.length) return;
+
+    const before = snapshotState();
+
+    if(count === 2){
+
+        part.staves.push({
+            clef: part.staves[0]?.clef === "bass" ? "treble" : "bass"
+        });
+
+    }else{
+
+        part.staves = [part.staves[0] || { clef:"treble" }];
+
+        state.measures.forEach(measure => {
+
+            measure.notes = measure.notes.filter(
+                note => !(
+                    notePartId(note) === part.id &&
+                    noteStaffIndex(note) >= 1
+                )
+            );
+        });
+
+        selectedStaff = 0;
+    }
+
+    commitHistory(before);
+
+    syncPartUI();
+    refreshAll();
+
+    notify(
+        count === 2
+            ? `${part.name} 已切换为钢琴大谱表：谱表 1 为高音、谱表 2 为低音。`
+            : `${part.name} 已切换为单谱表。`
+    );
+}
+
+function changePartClef(staffIndex, clef){
+
+    const part = activePart();
+
+    if(!part || !part.staves[staffIndex]) return;
+    if(part.staves[staffIndex].clef === clef) return;
+
+    const before = snapshotState();
+
+    part.staves[staffIndex].clef = clef;
+
+    commitHistory(before);
+
+    syncPartUI();
+    refreshAll();
 }
 
 /* 用和 ghost 相同的造型绘制工具栏图标 */
@@ -1449,10 +1980,10 @@ function diatonicToMidi(d, alter=0){
         alter;
 }
 
-/* 谱面位置（底线 E4 = 0）→ 按调号拼写的音高 */
-function pitchAtStaffStep(staffStep){
+/* 谱面位置（当前谱表底线 = 0）→ 按调号拼写的音高 */
+function pitchAtStaffStep(staffStep, bottomDiatonic = TREBLE_BOTTOM_DIATONIC){
 
-    const d = TREBLE_BOTTOM_DIATONIC + staffStep;
+    const d = bottomDiatonic + staffStep;
     const stepIndex = ((d % 7) + 7) % 7;
 
     return {
@@ -1522,9 +2053,14 @@ function midiToSpelling(midi, preferD=null){
 
 function noteStaffStep(note){
 
+    const bottom = staffBottomDiatonic(
+        notePartId(note),
+        noteStaffIndex(note)
+    );
+
     return note.octave * 7 +
         DIATONIC_STEPS.indexOf(note.step) -
-        TREBLE_BOTTOM_DIATONIC;
+        bottom;
 }
 
 function pitchLabel(note){
@@ -1585,45 +2121,50 @@ function buildScoreXml(){
     }
 
     const partList = createEl(doc, "part-list");
-    const scorePart = createEl(doc, "score-part");
 
-    scorePart.setAttribute("id", "P1");
-    scorePart.appendChild(createEl(doc, "part-name", "Piano"));
+    state.parts.forEach((part, index) => {
 
-    const scoreInstrument = createEl(doc, "score-instrument");
-    scoreInstrument.setAttribute("id", "P1-I1");
-    scoreInstrument.appendChild(createEl(doc, "instrument-name", "Piano"));
-    scorePart.appendChild(scoreInstrument);
+        const scorePart = createEl(doc, "score-part");
 
-    const midiInstrument = createEl(doc, "midi-instrument");
-    midiInstrument.setAttribute("id", "P1-I1");
-    midiInstrument.appendChild(createEl(doc, "midi-channel", 1));
-    midiInstrument.appendChild(createEl(doc, "midi-program", 1));
-    scorePart.appendChild(midiInstrument);
+        scorePart.setAttribute("id", part.id);
+        scorePart.appendChild(
+            createEl(doc, "part-name", part.name || `乐器 ${index + 1}`)
+        );
 
-    partList.appendChild(scorePart);
+        const instrumentId = `${part.id}-I1`;
+        const scoreInstrument = createEl(doc, "score-instrument");
+
+        scoreInstrument.setAttribute("id", instrumentId);
+        scoreInstrument.appendChild(
+            createEl(doc, "instrument-name", instrumentName(part.program))
+        );
+        scorePart.appendChild(scoreInstrument);
+
+        const midiInstrument = createEl(doc, "midi-instrument");
+
+        midiInstrument.setAttribute("id", instrumentId);
+        midiInstrument.appendChild(
+            createEl(doc, "midi-channel", partMidiChannel(index))
+        );
+        midiInstrument.appendChild(
+            createEl(doc, "midi-program", Math.max(1, part.program || 1))
+        );
+        scorePart.appendChild(midiInstrument);
+
+        partList.appendChild(scorePart);
+    });
+
     score.appendChild(partList);
-
-    const part = createEl(doc, "part");
-    part.setAttribute("id", "P1");
-    score.appendChild(part);
 
     const measureQ = nominalQ();
 
-    /* 连接线 / 圆滑线：先算出每个记号的目标音符，再在输出时同时写 start 和 stop */
+    /* 连接线 / 圆滑线：按“乐器 + 谱表 + 声部”分别计算目标音符 */
     const tieMap = new Map();
     const slurMap = new Map();
     const tieStops = new Set();
     const slurStops = new Set();
 
-    const markVoices = [...new Set(
-        state.measures
-            .flatMap(measure => measure.notes)
-            .filter(note => !note.rest)
-            .map(noteVoice)
-    )];
-
-    markVoices.forEach(voice => {
+    const collectVoiceTimeline = (partId, staffIndex, voice) => {
 
         const list = [];
 
@@ -1631,7 +2172,9 @@ function buildScoreXml(){
 
             measure.notes.forEach(note => {
 
-                if(note.rest || noteVoice(note) !== voice) return;
+                if(note.rest) return;
+                if(!sameNoteContext(note, partId, staffIndex)) return;
+                if(noteVoice(note) !== voice) return;
 
                 list.push({
                     note,
@@ -1641,39 +2184,63 @@ function buildScoreXml(){
             });
         });
 
-        list.sort((a, b) => {
+        return list.sort((a, b) => {
 
             if(Math.abs(a.abs - b.abs) > 1e-6) return a.abs - b.abs;
 
             return (a.note.chord ? 1 : 0) - (b.note.chord ? 1 : 0);
         });
+    };
 
-        list.forEach((entry, index) => {
+    state.parts.forEach(part => {
 
-            if(entry.note.tie){
+        part.staves.forEach((staff, staffIndex) => {
 
-                const target = list.slice(index + 1).find(other =>
-                    Math.abs(other.abs - (entry.abs + entry.note.durQ)) < 1e-4 &&
-                    noteMidi(other.note) === noteMidi(entry.note)
-                );
+            const voices = new Set();
 
-                if(target){
-                    tieMap.set(entry.note, target.note);
-                    tieStops.add(target.note);
-                }
-            }
+            state.measures.forEach(measure => {
 
-            if(entry.note.slur){
+                measure.notes.forEach(note => {
 
-                const target = list.slice(index + 1).find(
-                    other => other.abs > entry.abs + 1e-6
-                );
+                    if(note.rest) return;
+                    if(!sameNoteContext(note, part.id, staffIndex)) return;
 
-                if(target){
-                    slurMap.set(entry.note, target.note);
-                    slurStops.add(target.note);
-                }
-            }
+                    voices.add(noteVoice(note));
+                });
+            });
+
+            [...voices].sort((a, b) => a - b).forEach(voice => {
+
+                const list = collectVoiceTimeline(part.id, staffIndex, voice);
+
+                list.forEach((entry, index) => {
+
+                    if(entry.note.tie){
+
+                        const target = list.slice(index + 1).find(other =>
+                            Math.abs(other.abs - (entry.abs + entry.note.durQ)) < 1e-4 &&
+                            noteMidi(other.note) === noteMidi(entry.note)
+                        );
+
+                        if(target){
+                            tieMap.set(entry.note, target.note);
+                            tieStops.add(target.note);
+                        }
+                    }
+
+                    if(entry.note.slur){
+
+                        const target = list.slice(index + 1).find(
+                            other => other.abs > entry.abs + 1e-6
+                        );
+
+                        if(target){
+                            slurMap.set(entry.note, target.note);
+                            slurStops.add(target.note);
+                        }
+                    }
+                });
+            });
         });
     });
 
@@ -1743,33 +2310,44 @@ function buildScoreXml(){
         }
     };
 
-    state.measures.forEach((measure, mi) => {
+    const appendAttributes = (measureEl, part, partIndex) => {
 
-        const measureEl = createEl(doc, "measure");
+        const attributes = createEl(doc, "attributes");
+        const staffCount = part.staves.length || 1;
 
-        measureEl.setAttribute("number", String(mi + 1));
+        attributes.appendChild(createEl(doc, "divisions", DIVISIONS));
 
-        if(mi === 0){
+        const key = createEl(doc, "key");
+        key.appendChild(createEl(doc, "fifths", state.fifths));
+        attributes.appendChild(key);
 
-            const attributes = createEl(doc, "attributes");
+        const time = createEl(doc, "time");
+        time.appendChild(createEl(doc, "beats", state.beats));
+        time.appendChild(createEl(doc, "beat-type", state.beatType));
+        attributes.appendChild(time);
 
-            attributes.appendChild(createEl(doc, "divisions", DIVISIONS));
+        if(staffCount > 1){
+            attributes.appendChild(createEl(doc, "staves", staffCount));
+        }
 
-            const key = createEl(doc, "key");
-            key.appendChild(createEl(doc, "fifths", state.fifths));
-            attributes.appendChild(key);
+        part.staves.forEach((staff, staffIndex) => {
 
-            const time = createEl(doc, "time");
-            time.appendChild(createEl(doc, "beats", state.beats));
-            time.appendChild(createEl(doc, "beat-type", state.beatType));
-            attributes.appendChild(time);
-
+            const def = CLEF_DEFS[staff.clef] || CLEF_DEFS.treble;
             const clef = createEl(doc, "clef");
-            clef.appendChild(createEl(doc, "sign", "G"));
-            clef.appendChild(createEl(doc, "line", 2));
-            attributes.appendChild(clef);
 
-            measureEl.appendChild(attributes);
+            if(staffCount > 1){
+                clef.setAttribute("number", String(staffIndex + 1));
+            }
+
+            clef.appendChild(createEl(doc, "sign", def.sign));
+            clef.appendChild(createEl(doc, "line", def.line));
+            attributes.appendChild(clef);
+        });
+
+        measureEl.appendChild(attributes);
+
+        /* 速度只在总谱第一个乐器的第一小节写一次 */
+        if(partIndex === 0){
 
             const direction = createEl(doc, "direction");
             direction.setAttribute("placement", "above");
@@ -1786,57 +2364,161 @@ function buildScoreXml(){
 
             measureEl.appendChild(direction);
         }
+    };
 
-        const notes = measure.notes;
+    const appendStaffRef = (noteEl, part, staffIndex) => {
 
-        if(!notes.length){
+        if(part.staves.length > 1){
+            noteEl.appendChild(createEl(doc, "staff", staffIndex + 1));
+        }
+    };
 
-            const noteEl = createEl(doc, "note");
+    const appendStaffVoices = (measureEl, part, staffIndex, measure, mi, multiStaff) => {
 
-            const rest = createEl(doc, "rest");
-            rest.setAttribute("measure", "yes");
-            noteEl.appendChild(rest);
+        const staffNotes = measure.notes.filter(note =>
+            sameNoteContext(note, part.id, staffIndex)
+        );
 
-            noteEl.appendChild(
-                createEl(doc, "duration", Math.round(measureQ * DIVISIONS))
+        const voicesPresent = [...new Set(staffNotes.map(noteVoice))]
+            .sort((a, b) => a - b);
+
+        const voiceOrder = voicesPresent.includes(1)
+            ? voicesPresent
+            : [1, ...voicesPresent];
+
+        const multiVoice = voiceOrder.length > 1;
+
+        const appendBackup = () => {
+
+            const backup = createEl(doc, "backup");
+
+            backup.appendChild(
+                createEl(
+                    doc,
+                    "duration",
+                    Math.round(measureQ * DIVISIONS)
+                )
             );
-            noteEl.appendChild(createEl(doc, "voice", 1));
 
-            measureEl.appendChild(noteEl);
+            measureEl.appendChild(backup);
+        };
 
-        }else{
+        const appendVoice = voice => {
 
-            const voicesPresent = [...new Set(notes.map(noteVoice))]
-                .sort((a, b) => a - b);
+            const voiceNotes = staffNotes
+                .filter(note => noteVoice(note) === voice)
+                .sort((a, b) => {
 
-            const voiceOrder = voicesPresent.includes(1)
-                ? voicesPresent
-                : [1, ...voicesPresent];
+                    if(Math.abs((a.startQ || 0) - (b.startQ || 0)) > 1e-6){
+                        return (a.startQ || 0) - (b.startQ || 0);
+                    }
 
-            const multiVoice = voiceOrder.length > 1;
+                    return (a.chord ? 1 : 0) - (b.chord ? 1 : 0);
+                });
 
-            const appendVoice = voice => {
+            /* 整条谱表都没有音符：输出一个整小节休止 */
+            if(!voiceNotes.length){
 
-                const voiceNotes = notes
-                    .filter(note => noteVoice(note) === voice)
-                    .sort((a, b) => {
+                const noteEl = createEl(doc, "note");
+                const rest = createEl(doc, "rest");
 
-                        if(Math.abs((a.startQ || 0) - (b.startQ || 0)) > 1e-6){
-                            return (a.startQ || 0) - (b.startQ || 0);
-                        }
+                rest.setAttribute("measure", "yes");
+                noteEl.appendChild(rest);
+                noteEl.appendChild(
+                    createEl(doc, "duration", Math.round(measureQ * DIVISIONS))
+                );
+                noteEl.appendChild(createEl(doc, "voice", voice));
 
-                        return (a.chord ? 1 : 0) - (b.chord ? 1 : 0);
-                    });
+                appendStaffRef(noteEl, part, staffIndex);
+                measureEl.appendChild(noteEl);
 
-                const stem = voice % 2 === 1 ? "up" : "down";
+                return;
+            }
 
-                let cursor = 0;
+            const stem = voice % 2 === 1 ? "up" : "down";
 
-                const appendRest = durQ => {
+            let cursor = 0;
+
+            const appendRest = durQ => {
+
+                const noteEl = createEl(doc, "note");
+
+                noteEl.appendChild(createEl(doc, "rest"));
+                noteEl.appendChild(
+                    createEl(
+                        doc,
+                        "duration",
+                        Math.max(1, Math.round(durQ * DIVISIONS))
+                    )
+                );
+                noteEl.appendChild(createEl(doc, "voice", voice));
+                updateNoteType(noteEl, durQ);
+                appendStaffRef(noteEl, part, staffIndex);
+
+                measureEl.appendChild(noteEl);
+            };
+
+            const fillRests = fromQ => {
+
+                const ticks = Math.round((fromQ - cursor) * DIVISIONS);
+
+                if(ticks <= 0) return;
+
+                splitTicksIntoNotatable(ticks, DIVISIONS).forEach(t => {
+
+                    const q = t / DIVISIONS;
+
+                    if(q > 0) appendRest(q);
+                });
+
+                cursor = fromQ;
+            };
+
+            /* 把同一 startQ 的音符归为一个事件；和弦成员一起输出 */
+            const groups = [];
+
+            voiceNotes.forEach(note => {
+
+                const q = Math.round((note.startQ || 0) * 10000) / 10000;
+                const last = groups[groups.length - 1];
+
+                if(last && Math.abs(last.q - q) < 1e-6){
+                    last.notes.push(note);
+                }else{
+                    groups.push({ q, notes:[note] });
+                }
+            });
+
+            groups.forEach(group => {
+
+                const groupDurQ = group.notes.reduce(
+                    (max, note) => Math.max(max, note.durQ),
+                    0
+                );
+
+                if(group.q > cursor + 1e-6){
+                    fillRests(group.q);
+                }
+
+                const lead = group.notes.find(n => !n.chord) || group.notes[0];
+
+                group.notes.forEach(note => {
 
                     const noteEl = createEl(doc, "note");
 
-                    noteEl.appendChild(createEl(doc, "rest"));
+                    if(note.rest){
+
+                        noteEl.appendChild(createEl(doc, "rest"));
+
+                    }else{
+
+                        if(note !== lead) noteEl.appendChild(createEl(doc, "chord"));
+
+                        appendPitch(doc, noteEl, note);
+                    }
+
+                    const durQ = note.rest ? note.durQ : groupDurQ;
+
                     noteEl.appendChild(
                         createEl(
                             doc,
@@ -1844,106 +2526,70 @@ function buildScoreXml(){
                             Math.max(1, Math.round(durQ * DIVISIONS))
                         )
                     );
+
                     noteEl.appendChild(createEl(doc, "voice", voice));
+
                     updateNoteType(noteEl, durQ);
 
+                    if(multiVoice && !note.rest){
+                        noteEl.appendChild(createEl(doc, "stem", stem));
+                    }
+
+                    appendStaffRef(noteEl, part, staffIndex);
+                    appendNoteMarks(noteEl, note);
+
                     measureEl.appendChild(noteEl);
-                };
-
-                const fillRests = fromQ => {
-
-                    const ticks = Math.round((fromQ - cursor) * DIVISIONS);
-
-                    if(ticks <= 0) return;
-
-                    splitTicksIntoNotatable(ticks, DIVISIONS).forEach(t => {
-
-                        const q = t / DIVISIONS;
-
-                        if(q > 0) appendRest(q);
-                    });
-
-                    cursor = fromQ;
-                };
-
-                /* 把同一 startQ 的音符归为一个事件；和弦成员一起输出 */
-                const groups = [];
-
-                voiceNotes.forEach(note => {
-
-                    const q = Math.round((note.startQ || 0) * 10000) / 10000;
-                    const last = groups[groups.length - 1];
-
-                    if(last && Math.abs(last.q - q) < 1e-6){
-                        last.notes.push(note);
-                    }else{
-                        groups.push({ q, notes:[note] });
-                    }
                 });
 
-                groups.forEach(group => {
+                cursor = Math.max(cursor, group.q + groupDurQ);
+            });
 
-                    const groupDurQ = group.notes.reduce(
-                        (max, note) => Math.max(max, note.durQ),
-                        0
-                    );
+            if(cursor < measureQ - 1e-6){
+                fillRests(measureQ);
+            }
+        };
 
-                    if(group.q > cursor + 1e-6){
-                        fillRests(group.q);
-                    }
+        voiceOrder.forEach((voice, index) => {
 
-                    const lead = group.notes.find(n => !n.chord) || group.notes[0];
+            /* 每个新声部都从当前小节开头重新开始 */
+            if(index > 0) appendBackup();
 
-                    group.notes.forEach(note => {
+            appendVoice(voice);
+        });
+    };
 
-                        const noteEl = createEl(doc, "note");
+    state.parts.forEach((part, partIndex) => {
 
-                        if(note.rest){
+        const partEl = createEl(doc, "part");
 
-                            noteEl.appendChild(createEl(doc, "rest"));
+        partEl.setAttribute("id", part.id);
+        score.appendChild(partEl);
 
-                        }else{
+        const staffCount = part.staves.length || 1;
 
-                            if(note !== lead) noteEl.appendChild(createEl(doc, "chord"));
+        state.measures.forEach((measure, mi) => {
 
-                            appendPitch(doc, noteEl, note);
-                        }
+            const measureEl = createEl(doc, "measure");
 
-                        const durQ = note.rest ? note.durQ : groupDurQ;
+            measureEl.setAttribute("number", String(mi + 1));
 
-                        noteEl.appendChild(
-                            createEl(
-                                doc,
-                                "duration",
-                                Math.max(1, Math.round(durQ * DIVISIONS))
-                            )
-                        );
+            if(mi === 0){
+                appendAttributes(measureEl, part, partIndex);
+            }
 
-                        noteEl.appendChild(createEl(doc, "voice", voice));
+            part.staves.forEach((staff, staffIndex) => {
 
-                        updateNoteType(noteEl, durQ);
+                appendStaffVoices(
+                    measureEl,
+                    part,
+                    staffIndex,
+                    measure,
+                    mi,
+                    staffCount > 1
+                );
 
-                        if(multiVoice && !note.rest){
-                            noteEl.appendChild(createEl(doc, "stem", stem));
-                        }
-
-                        appendNoteMarks(noteEl, note);
-
-                        measureEl.appendChild(noteEl);
-                    });
-
-                    cursor = Math.max(cursor, group.q + groupDurQ);
-                });
-
-                if(cursor < measureQ - 1e-6){
-                    fillRests(measureQ);
-                }
-            };
-
-            voiceOrder.forEach((voice, index) => {
-
-                /* 每个新声部都从当前小节开头重新开始 */
-                if(index > 0){
+                /* 换到下一条谱表前回到小节开头 */
+                if(staffIndex < staffCount - 1){
 
                     const backup = createEl(doc, "backup");
 
@@ -1957,12 +2603,10 @@ function buildScoreXml(){
 
                     measureEl.appendChild(backup);
                 }
-
-                appendVoice(voice);
             });
-        }
 
-        part.appendChild(measureEl);
+            partEl.appendChild(measureEl);
+        });
     });
 
     return serializeMusicXml(doc, true);
@@ -1990,6 +2634,7 @@ async function renderPreview(){
 
     osmdInstance = null;
     measureGeoms = [];
+    staffGeoms = [];
     noteHandles = [];
     addGhost = null;
     hoverPoint = null;
@@ -2004,6 +2649,7 @@ async function renderPreview(){
                 stretchLastSystemLine:true,
                 drawTitle:true,
                 drawComposer:true,
+                drawPartNames: state.parts.length > 1,
                 followCursor:false
             }
         );
@@ -2090,23 +2736,29 @@ function refreshMeasureSelect(){
 function refreshNoteList(){
 
     const measure = currentMeasure();
+    const part = activePart();
+    const staffIndex = activeStaffIndex();
 
     noteList.innerHTML = "";
 
-    noteCountText.textContent = `${measure.notes.length} 个`;
+    const notes = measure.notes.filter(note =>
+        part && sameNoteContext(note, part.id, staffIndex)
+    );
 
-    if(!measure.notes.length){
+    noteCountText.textContent = `${notes.length} 个`;
+
+    if(!notes.length){
 
         const empty = document.createElement("span");
 
         empty.className = "note-empty";
-        empty.textContent = "这一小节还是空的，直接在右侧谱面上点击落音吧。";
+        empty.textContent = "当前谱表这一小节还是空的，直接在右侧谱面上点击落音吧。";
 
         noteList.appendChild(empty);
         return;
     }
 
-    [...measure.notes]
+    [...notes]
         .sort((a, b) => {
 
             if(Math.abs((a.startQ || 0) - (b.startQ || 0)) > 1e-6){
@@ -2132,6 +2784,7 @@ function refreshNoteList(){
             const meta = document.createElement("small");
 
             meta.textContent =
+                (part.staves.length > 1 ? `谱表 ${staffIndex + 1} · ` : "") +
                 `声部 ${noteVoice(note)} · 第 ${formatQ(note.startQ || 0)} 拍 · ` +
                 (note.chord ? "和弦 · " : "") +
                 (DURATION_NAMES[note.durQ] || `${formatQ(note.durQ)} 拍`);
@@ -2168,11 +2821,14 @@ function refreshNoteList(){
 
 function refreshMeter(){
 
-    const used = measureEndQ(currentMeasure());
+    const part = activePart();
+    const staffIndex = activeStaffIndex();
+    const used = measureEndQ(currentMeasure(), part?.id, staffIndex);
     const total = nominalQ();
     const remain = total - used;
 
     measureMeterText.textContent =
+        (part?.staves.length > 1 ? `谱表 ${staffIndex + 1} · ` : "") +
         `已排到 ${formatQ(used)} 拍 / 共 ${formatQ(total)} 拍`;
 
     measureRemainText.textContent =
@@ -2197,6 +2853,7 @@ function refreshMeter(){
 }
 
 function refreshAll(){
+    syncPartUI();
     refreshMeasureSelect();
     refreshNoteList();
     refreshMeter();
@@ -2313,6 +2970,8 @@ function refreshGhostFromHover(){
 
     const rest = restToggle.checked;
     const midi = pitch ? diatonicToMidi(pitch.d, pitch.alter) : 60;
+    const partId = geom.partId || activePartId();
+    const staffIndex = geom.staffIndex ?? activeStaffIndex();
 
     const info = placementAt(
         geom.mi,
@@ -2320,12 +2979,14 @@ function refreshGhostFromHover(){
         currentDurQ(),
         midi,
         rest,
-        currentVoice()
+        currentVoice(),
+        partId,
+        staffIndex
     );
 
     const effectivePitch = rest ? null : pitch;
 
-    hoverPoint = { geom, q, pitch:effectivePitch, info };
+    hoverPoint = { geom, q, pitch:effectivePitch, info, partId, staffIndex };
 
     paintAddGhost(geom, q, effectivePitch, info, rest);
 }
@@ -2335,6 +2996,7 @@ function selectedNoteGroup(measure, note){
     return measure.notes.filter(n =>
         !n.rest &&
         noteVoice(n) === noteVoice(note) &&
+        sameNoteContext(n, notePartId(note), noteStaffIndex(note)) &&
         sameStart(n, note)
     );
 }
@@ -2349,6 +3011,7 @@ function maxDurationForNote(measure, note){
 
         if(n.rest) return;
         if(noteVoice(n) !== noteVoice(note)) return;
+        if(!sameNoteContext(n, notePartId(note), noteStaffIndex(note))) return;
 
         const q = n.startQ || 0;
 
@@ -2431,10 +3094,21 @@ function changeSelectedNoteDuration(direction){
     if(direction > 0){
 
         /* 加长时吃掉后面的休止符；缩短后留下的空拍会自动补休止符 */
-        cutRests(measure, note.startQ, target, noteVoice(note));
+        cutRests(
+            measure,
+            note.startQ,
+            target,
+            noteVoice(note),
+            notePartId(note),
+            noteStaffIndex(note)
+        );
     }
 
-    ensureTrailingBlankMeasures();
+    ensureTrailingBlankMeasures(
+        notePartId(note),
+        noteStaffIndex(note),
+        noteVoice(note)
+    );
 
     setDurationValue(target);
 
@@ -2473,12 +3147,19 @@ function syncDurationFromSelection(){
     refreshToolbar();
 }
 
-function voiceEndQ(measure, voice){
+function voiceEndQ(
+    measure,
+    voice,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
     return measure.notes.reduce(
-        (end, note) => noteVoice(note) === voice
-            ? Math.max(end, (note.startQ || 0) + note.durQ)
-            : end,
+        (end, note) =>
+            noteVoice(note) === voice &&
+            sameNoteContext(note, partId, staffIndex)
+                ? Math.max(end, (note.startQ || 0) + note.durQ)
+                : end,
         0
     );
 }
@@ -2487,13 +3168,25 @@ function voiceEndQ(measure, voice){
    小节增长与“插入时间”顺延
 ========================================================= */
 
-function measureIsFull(measure){
+function measureIsFull(
+    measure,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex(),
+    voice = currentVoice()
+){
 
-    return !!measure && measureEndQ(measure) >= nominalQ() - EPS;
+    if(!measure) return false;
+
+    return voiceEndQ(measure, voice, partId, staffIndex) >= nominalQ() - EPS ||
+        measureEndQ(measure) >= nominalQ() - EPS;
 }
 
 /* 最后一个小节写满后，自动补两个空白小节 */
-function ensureTrailingBlankMeasures(){
+function ensureTrailingBlankMeasures(
+    partId = activePartId(),
+    staffIndex = activeStaffIndex(),
+    voice = currentVoice()
+){
 
     let guard = 0;
 
@@ -2501,7 +3194,7 @@ function ensureTrailingBlankMeasures(){
 
         const last = state.measures[state.measures.length - 1];
 
-        if(!measureIsFull(last)) break;
+        if(!measureIsFull(last, partId, staffIndex, voice)) break;
 
         state.measures.push({ notes:[] }, { notes:[] });
     }
@@ -2513,6 +3206,8 @@ function noteContinuation(note, startQ, durQ){
         rest:false,
         chord:false,
         voice:noteVoice(note),
+        part:notePartId(note),
+        staff:noteStaffIndex(note),
         startQ,
         durQ,
         step:note.step,
@@ -2523,7 +3218,15 @@ function noteContinuation(note, startQ, durQ){
 
 /* 在 mi 小节的 fromQ 处插入 amount 拍：后面的音符整体后移。
    本小节放不下的部分顺延到下一小节，必要时继续往后传递。 */
-function propagateInsert(mi, voice, fromQ, amount, carried=[]){
+function propagateInsert(
+    mi,
+    voice,
+    fromQ,
+    amount,
+    carried = [],
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
     while(state.measures.length <= mi){
         state.measures.push({ notes:[] });
@@ -2535,6 +3238,7 @@ function propagateInsert(mi, voice, fromQ, amount, carried=[]){
     measure.notes.forEach(note => {
 
         if(note.rest || noteVoice(note) !== voice) return;
+        if(!sameNoteContext(note, partId, staffIndex)) return;
         if(carriedSet.has(note)) return;
 
         if((note.startQ || 0) >= fromQ - EPS){
@@ -2553,6 +3257,11 @@ function propagateInsert(mi, voice, fromQ, amount, carried=[]){
     measure.notes.forEach(note => {
 
         if(note.rest || noteVoice(note) !== voice){
+            keep.push(note);
+            return;
+        }
+
+        if(!sameNoteContext(note, partId, staffIndex)){
             keep.push(note);
             return;
         }
@@ -2593,17 +3302,31 @@ function propagateInsert(mi, voice, fromQ, amount, carried=[]){
     measure.notes = keep.filter(note => {
 
         if(!note.rest || noteVoice(note) !== voice) return true;
+        if(!sameNoteContext(note, partId, staffIndex)) return true;
 
         return (note.startQ || 0) < total - EPS;
     });
 
     if(nextCarried.length){
-        propagateInsert(mi + 1, voice, 0, roundQ(nextAmount), nextCarried);
+        propagateInsert(
+            mi + 1,
+            voice,
+            0,
+            roundQ(nextAmount),
+            nextCarried,
+            partId,
+            staffIndex
+        );
     }
 }
 
 /* 插入/顺延后，把与音符重叠的显式休止符删掉；剩余空隙由小节自动补休止符 */
-function normalizeVoiceRests(fromMi, voice){
+function normalizeVoiceRests(
+    fromMi,
+    voice,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
     const total = nominalQ();
 
@@ -2612,7 +3335,11 @@ function normalizeVoiceRests(fromMi, voice){
         const measure = state.measures[mi];
 
         const intervals = measure.notes
-            .filter(note => !note.rest && noteVoice(note) === voice)
+            .filter(note =>
+                !note.rest &&
+                noteVoice(note) === voice &&
+                sameNoteContext(note, partId, staffIndex)
+            )
             .map(note => [
                 Math.max(0, note.startQ || 0),
                 Math.min(total, (note.startQ || 0) + note.durQ)
@@ -2636,6 +3363,7 @@ function normalizeVoiceRests(fromMi, voice){
         measure.notes = measure.notes.filter(note => {
 
             if(!note.rest || noteVoice(note) !== voice) return true;
+            if(!sameNoteContext(note, partId, staffIndex)) return true;
 
             const start = note.startQ || 0;
 
@@ -2658,10 +3386,17 @@ function normalizeVoiceRests(fromMi, voice){
     }
 }
 
-function insertTimeBeforeNote(mi, q, durQ, voice){
+function insertTimeBeforeNote(
+    mi,
+    q,
+    durQ,
+    voice,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
-    propagateInsert(mi, voice, q, durQ);
-    normalizeVoiceRests(mi, voice);
+    propagateInsert(mi, voice, q, durQ, [], partId, staffIndex);
+    normalizeVoiceRests(mi, voice, partId, staffIndex);
 }
 
 /* =========================================================
@@ -2673,7 +3408,11 @@ function absoluteNoteStart(mi, note){
     return mi * nominalQ() + (note.startQ || 0);
 }
 
-function orderedVoiceNotes(voice){
+function orderedVoiceNotes(
+    voice,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
     const list = [];
 
@@ -2682,6 +3421,7 @@ function orderedVoiceNotes(voice){
         measure.notes.forEach(note => {
 
             if(note.rest || noteVoice(note) !== voice) return;
+            if(!sameNoteContext(note, partId, staffIndex)) return;
 
             list.push({
                 note,
@@ -2702,7 +3442,11 @@ function orderedVoiceNotes(voice){
 function findTieTarget(found){
 
     const mi = state.measures.indexOf(found.measure);
-    const list = orderedVoiceNotes(noteVoice(found.note));
+    const list = orderedVoiceNotes(
+        noteVoice(found.note),
+        notePartId(found.note),
+        noteStaffIndex(found.note)
+    );
     const endAbs = absoluteNoteStart(mi, found.note) + found.note.durQ;
 
     return list.find(entry =>
@@ -2716,7 +3460,11 @@ function findTieTarget(found){
 function findSlurTarget(found){
 
     const mi = state.measures.indexOf(found.measure);
-    const list = orderedVoiceNotes(noteVoice(found.note));
+    const list = orderedVoiceNotes(
+        noteVoice(found.note),
+        notePartId(found.note),
+        noteStaffIndex(found.note)
+    );
     const startAbs = absoluteNoteStart(mi, found.note);
 
     return list.find(entry =>
@@ -2787,19 +3535,25 @@ function addNote(){
 
     let measure = currentMeasure();
     const voice = currentVoice();
+    const partId = activePartId();
+    const staffIndex = activeStaffIndex();
 
     const rest = restToggle.checked;
     const wantChord = chordToggle.checked && !rest;
 
     let durQ = currentDurQ();
-    let q = voiceEndQ(measure, voice);
+    let q = voiceEndQ(measure, voice, partId, staffIndex);
     let chord = false;
 
     if(wantChord){
 
         const lead = [...measure.notes]
             .reverse()
-            .find(n => !n.chord && noteVoice(n) === voice);
+            .find(n =>
+                !n.chord &&
+                noteVoice(n) === voice &&
+                sameNoteContext(n, partId, staffIndex)
+            );
 
         if(!lead || lead.rest){
 
@@ -2822,7 +3576,7 @@ function addNote(){
 
             selectedMeasure++;
             measure = currentMeasure();
-            q = voiceEndQ(measure, voice);
+            q = voiceEndQ(measure, voice, partId, staffIndex);
 
         }else{
 
@@ -2851,7 +3605,7 @@ function addNote(){
     measure.notes.push(note);
     sortMeasureNotes(measure);
 
-    ensureTrailingBlankMeasures();
+    ensureTrailingBlankMeasures(partId, staffIndex, voice);
 
     selectedNoteId = rest ? null : note.id;
 
@@ -2883,11 +3637,13 @@ function sameStart(a, b){
     return Math.abs((a.startQ || 0) - (b.startQ || 0)) < EPS;
 }
 
-function notesAtStart(measure, q, voice=null){
+function notesAtStart(measure, q, voice=null, partId=null, staffIndex=null){
     return measure.notes.filter(n =>
         !n.rest &&
         Math.abs(n.startQ - q) < EPS &&
-        (voice == null || noteVoice(n) === voice)
+        (voice == null || noteVoice(n) === voice) &&
+        (partId == null || notePartId(n) === partId) &&
+        (staffIndex == null || noteStaffIndex(n) === staffIndex)
     );
 }
 
@@ -2903,7 +3659,16 @@ function spellName(pitch){
 }
 
 /* 检查一个落点是否可用；不修改任何状态 */
-function placementAt(mi, q, durQ, midi, rest, voice=1){
+function placementAt(
+    mi,
+    q,
+    durQ,
+    midi,
+    rest,
+    voice = 1,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
     const measure = state.measures[mi];
     const total = nominalQ();
@@ -2925,7 +3690,7 @@ function placementAt(mi, q, durQ, midi, rest, voice=1){
 
     if(measure){
 
-        const group = notesAtStart(measure, q, voice);
+        const group = notesAtStart(measure, q, voice, partId, staffIndex);
 
         /* 勾选“和弦音”时，在同一拍上叠音；否则在音符前插入并让原音符后移 */
         if(!rest && group.length && chordToggle.checked){
@@ -2960,6 +3725,7 @@ function placementAt(mi, q, durQ, midi, rest, voice=1){
         const covering = measure.notes.find(note =>
             !note.rest &&
             noteVoice(note) === voice &&
+            sameNoteContext(note, partId, staffIndex) &&
             (note.startQ || 0) < q - EPS &&
             (note.startQ || 0) + note.durQ > q + EPS
         );
@@ -2976,13 +3742,25 @@ function placementAt(mi, q, durQ, midi, rest, voice=1){
 }
 
 /* 把与 [q, q+durQ) 重叠的休止符切开或删除 */
-function cutRests(measure, q, durQ, voice=1){
+function cutRests(
+    measure,
+    q,
+    durQ,
+    voice = 1,
+    partId = activePartId(),
+    staffIndex = activeStaffIndex()
+){
 
     const kept = [];
 
     measure.notes.forEach(note => {
 
         if(!note.rest || noteVoice(note) !== voice){
+            kept.push(note);
+            return;
+        }
+
+        if(!sameNoteContext(note, partId, staffIndex)){
             kept.push(note);
             return;
         }
@@ -3003,6 +3781,8 @@ function cutRests(measure, q, durQ, voice=1){
                 rest:true,
                 voice,
                 chord:false,
+                part:partId,
+                staff:staffIndex,
                 startQ:start,
                 durQ:roundQ(leftQ)
             }));
@@ -3013,6 +3793,8 @@ function cutRests(measure, q, durQ, voice=1){
                 rest:true,
                 voice,
                 chord:false,
+                part:partId,
+                staff:staffIndex,
                 startQ:roundQ(q + durQ),
                 durQ:roundQ(rightQ)
             }));
@@ -3026,6 +3808,8 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
 
     const rest = !!opts.rest;
     const voice = opts.voice || currentVoice();
+    const partId = opts.part || activePartId();
+    const staffIndex = opts.staff ?? activeStaffIndex();
     const measure = state.measures[mi];
 
     if(!measure) return { error:"小节不存在。" };
@@ -3035,7 +3819,16 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
 
     const midi = pitch ? diatonicToMidi(pitch.d, pitch.alter) : 60;
 
-    const info = placementAt(mi, q, durQ, midi, rest, voice);
+    const info = placementAt(
+        mi,
+        q,
+        durQ,
+        midi,
+        rest,
+        voice,
+        partId,
+        staffIndex
+    );
 
     if(!info.valid) return { error:info.error };
     if(info.overflow) return { error:info.error };
@@ -3050,6 +3843,8 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
             rest:false,
             chord:true,
             voice,
+            part:partId,
+            staff:staffIndex,
             startQ:q,
             durQ:info.durQ,
             step:pitch.step,
@@ -3061,12 +3856,14 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
 
     }else if(rest){
 
-        cutRests(measure, q, info.durQ, voice);
+        cutRests(measure, q, info.durQ, voice, partId, staffIndex);
 
         note = newNote({
             rest:true,
             voice,
             chord:false,
+            part:partId,
+            staff:staffIndex,
             startQ:q,
             durQ:info.durQ
         });
@@ -3076,12 +3873,14 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
     }else{
 
         /* 在音符前插入：后面的音符顺延，多余的时值从后续休止符里扣除 */
-        insertTimeBeforeNote(mi, q, info.durQ, voice);
+        insertTimeBeforeNote(mi, q, info.durQ, voice, partId, staffIndex);
 
         note = newNote({
             rest:false,
             voice,
             chord:false,
+            part:partId,
+            staff:staffIndex,
             startQ:q,
             durQ:info.durQ,
             step:pitch.step,
@@ -3096,10 +3895,12 @@ function addNoteAt(mi, q, pitch, durQ, opts={}){
         sortMeasureNotes(state.measures[index]);
     }
 
-    ensureTrailingBlankMeasures();
+    ensureTrailingBlankMeasures(partId, staffIndex, voice);
 
     selectedNoteId = rest ? null : note.id;
     selectedMeasure = mi;
+    selectedPartId = partId;
+    selectedStaff = staffIndex;
 
     /* 添加音符后立刻试听落点音高（休止符不发声） */
     if(!rest) auditionMidi(midi);
@@ -3138,6 +3939,7 @@ function releaseNote(id, opts={}){
         const group = measure.notes.filter(n =>
             !n.rest &&
             noteVoice(n) === noteVoice(note) &&
+            sameNoteContext(n, notePartId(note), noteStaffIndex(note)) &&
             sameStart(n, note)
         );
 
@@ -3158,6 +3960,8 @@ function releaseNote(id, opts={}){
                 rest:true,
                 voice:noteVoice(note),
                 chord:false,
+                part:notePartId(note),
+                staff:noteStaffIndex(note),
                 startQ:note.startQ,
                 durQ:note.durQ
             }));
@@ -3189,7 +3993,9 @@ function snapshotState(){
 
     return JSON.stringify({
         state,
-        selectedMeasure
+        selectedMeasure,
+        selectedPartId,
+        selectedStaff
     });
 }
 
@@ -3204,6 +4010,7 @@ function recomputeNextNoteId(){
     });
 
     nextNoteId = maxId + 1;
+    recomputeNextPartId();
 }
 
 function updateHistoryButtons(){
@@ -3228,6 +4035,8 @@ function restoreSnapshot(json){
 
     state = data.state;
     selectedMeasure = data.selectedMeasure;
+    selectedPartId = data.selectedPartId || state.parts[0]?.id || "P1";
+    selectedStaff = data.selectedStaff || 0;
 
     recomputeNextNoteId();
 
@@ -3318,28 +4127,35 @@ function measureAtPoint(x, y){
     let best = null;
     let bestDistance = Infinity;
 
-    for(const geom of measureGeoms){
+    const rows = staffGeoms.length
+        ? staffGeoms
+        : measureGeoms.map(geom => [geom]);
 
-        if(!geom) continue;
+    for(const row of rows){
 
-        if(
-            x < geom.x0 - 2 ||
-            x > geom.x1 + 2 ||
-            y < geom.topY - 14 * STEP_PX ||
-            y > geom.bottomY + 14 * STEP_PX
-        ){
-            continue;
-        }
+        for(const geom of row || []){
 
-        /* 多行谱表上下有重叠的容差，取离五线谱最近的一行 */
-        const distance =
-            y < geom.topY ? geom.topY - y :
-            y > geom.bottomY ? y - geom.bottomY :
-            0;
+            if(!geom) continue;
 
-        if(distance < bestDistance){
-            bestDistance = distance;
-            best = geom;
+            if(
+                x < geom.x0 - 2 ||
+                x > geom.x1 + 2 ||
+                y < geom.topY - 14 * STEP_PX ||
+                y > geom.bottomY + 14 * STEP_PX
+            ){
+                continue;
+            }
+
+            /* 多行谱表上下有重叠的容差，取离五线谱最近的一行 */
+            const distance =
+                y < geom.topY ? geom.topY - y :
+                y > geom.bottomY ? y - geom.bottomY :
+                0;
+
+            if(distance < bestDistance){
+                bestDistance = distance;
+                best = geom;
+            }
         }
     }
 
@@ -3598,8 +4414,10 @@ function xAtQ(geom, q){
 
 function yAtPitch(geom, pitch){
 
+    const bottom = geom.bottomDiatonic ?? TREBLE_BOTTOM_DIATONIC;
+
     return geom.bottomY +
-        (TREBLE_BOTTOM_DIATONIC - pitch.d) * STEP_PX;
+        (bottom - pitch.d) * STEP_PX;
 }
 
 /* 超出五线谱的音需要哪些加线（返回值相对底线，单位是全音级） */
@@ -3642,7 +4460,8 @@ function paintLedgerLines(host, geom, pitch, notePt){
         return;
     }
 
-    const steps = ledgerStepsFor(pitch.d - TREBLE_BOTTOM_DIATONIC);
+    const bottom = geom.bottomDiatonic ?? TREBLE_BOTTOM_DIATONIC;
+    const steps = ledgerStepsFor(pitch.d - bottom);
 
     if(!steps.length) return;
 
@@ -3657,7 +4476,7 @@ function paintLedgerLines(host, geom, pitch, notePt){
             osmdInstance,
             previewContainer,
             0,
-            yAtPitch(geom, { d:TREBLE_BOTTOM_DIATONIC + step })
+            yAtPitch(geom, { d:bottom + step })
         );
 
         if(!pt) return;
@@ -3860,13 +4679,37 @@ function paintAddGhost(geom, q, pitch, info, rest){
 
     const label = ghost.querySelector(".ghost-label");
 
+    const context = geom.partId
+        ? `${partById(geom.partId)?.name || ""} · ${staffLabel(geom.partId, geom.staffIndex)} · `
+        : "";
+
     const text = rest
-        ? `声部 ${voice} · 休止 ${formatQ(duration)} 拍`
-        : `声部 ${voice} · ${pitch ? spellName(pitch) : ""} · ` +
+        ? `${context}声部 ${voice} · 休止 ${formatQ(duration)} 拍`
+        : `${context}声部 ${voice} · ${pitch ? spellName(pitch) : ""} · ` +
           `${formatQ(duration)} 拍` +
           (info.chord ? " · 和弦" : "");
 
     label.textContent = info.valid && !info.overflow ? text : (info.error || text);
+}
+
+/* 所有乐器的所有谱表按 OSMD 的 staff 顺序展开 */
+function flattenStaffSlots(){
+
+    const slots = [];
+
+    state.parts.forEach(part => {
+
+        part.staves.forEach((staff, staffIndex) => {
+
+            slots.push({
+                partId:part.id,
+                staffIndex,
+                clef:staff.clef || "treble"
+            });
+        });
+    });
+
+    return slots;
 }
 
 function buildEditorOverlay(){
@@ -3876,6 +4719,7 @@ function buildEditorOverlay(){
         .forEach(el => el.remove());
 
     measureGeoms = [];
+    staffGeoms = state.measures.map(() => []);
     noteHandles = [];
     addGhost = null;
 
@@ -3883,42 +4727,60 @@ function buildEditorOverlay(){
 
     const container = previewContainer;
     const ml = osmdInstance.GraphicSheet?.MeasureList || [];
+    const slots = flattenStaffSlots();
 
     ml.forEach((staffMeasures, mi) => {
 
-        const sm = staffMeasures && staffMeasures[0];
+        slots.forEach((slot, staffSlot) => {
 
-        if(!sm || !sm.PositionAndShape) return;
+            const sm = staffMeasures && staffMeasures[staffSlot];
 
-        const shape = sm.PositionAndShape;
-        const abs = shape.AbsolutePosition;
-        const size = shape.Size;
-        const staffHeight = sm.ParentStaffLine?.staffHeight || 4;
+            if(!sm || !sm.PositionAndShape) return;
 
-        const x0 = abs.x * 10;
-        const x1 = (abs.x + size.width) * 10;
+            const shape = sm.PositionAndShape;
+            const abs = shape.AbsolutePosition;
+            const size = shape.Size;
+            const staffHeight = sm.ParentStaffLine?.staffHeight || 4;
 
-        let left = x0 + (sm.beginInstructionsWidth || 0) * 10;
-        let right = x1 - Math.max(0.35, sm.endInstructionsWidth || 0) * 10;
+            const x0 = abs.x * 10;
+            const x1 = (abs.x + size.width) * 10;
 
-        if(right - left < 12){
-            left = x0 + 4;
-            right = x1 - 4;
-        }
+            let left = x0 + (sm.beginInstructionsWidth || 0) * 10;
+            let right = x1 - Math.max(0.35, sm.endInstructionsWidth || 0) * 10;
 
-        const geom = {
-            mi,
-            x0,
-            x1,
-            left,
-            right,
-            topY: abs.y * 10,
-            bottomY: abs.y * 10 + staffHeight * 10
-        };
+            if(right - left < 12){
+                left = x0 + 4;
+                right = x1 - 4;
+            }
 
-        geom.anchors = measureEventAnchors(sm, geom);
+            const geom = {
+                mi,
+                staffSlot,
+                partId:slot.partId,
+                staffIndex:slot.staffIndex,
+                bottomDiatonic:clefBottomDiatonic(slot.clef),
+                x0,
+                x1,
+                left,
+                right,
+                topY: abs.y * 10,
+                bottomY: abs.y * 10 + staffHeight * 10
+            };
 
-        measureGeoms[mi] = geom;
+            geom.anchors = measureEventAnchors(sm, geom);
+
+            staffGeoms[mi][staffSlot] = geom;
+
+            if(staffSlot === 0) measureGeoms[mi] = geom;
+        });
+    });
+
+    /* 极端情况下第一行谱表没有几何信息，也要保证有可用的 measureGeoms */
+    state.measures.forEach((measure, mi) => {
+
+        if(measureGeoms[mi]) return;
+
+        measureGeoms[mi] = (staffGeoms[mi] || []).find(Boolean) || null;
     });
 
     const layer = document.createElement("div");
@@ -3928,102 +4790,115 @@ function buildEditorOverlay(){
     /* 为每个已渲染音符建立可点选 / 可拖动的手柄 */
     ml.forEach((staffMeasures, mi) => {
 
-        const sm = staffMeasures && staffMeasures[0];
+        slots.forEach((slot, staffSlot) => {
 
-        if(!sm) return;
+            const sm = staffMeasures && staffMeasures[staffSlot];
 
-        const modelNotes = state.measures[mi]?.notes || [];
-        const used = new Set();
+            if(!sm) return;
 
-        (sm.staffEntries || []).forEach(se => {
+            const modelNotes = (state.measures[mi]?.notes || []).filter(
+                note => sameNoteContext(note, slot.partId, slot.staffIndex)
+            );
 
-            (se.graphicalVoiceEntries || []).forEach(gve => {
+            const used = new Set();
 
-                (gve.notes || []).forEach(sn => {
+            (sm.staffEntries || []).forEach(se => {
 
-                    const src = sn?.sourceNote || sn;
+                (se.graphicalVoiceEntries || []).forEach(gve => {
 
-                    const voiceEntry =
-                        src?.voiceEntry ||
-                        sn?.parentVoiceEntry?.parentVoiceEntry ||
-                        sn?.ParentVoiceEntry ||
-                        null;
+                    (gve.notes || []).forEach(sn => {
 
-                    if(
-                        !src ||
-                        src.isRestFlag ||
-                        sn.IsGraceNote ||
-                        voiceEntry?.isGrace
-                    ){
-                        return;
-                    }
+                        const src = sn?.sourceNote || sn;
 
-                    const timestamp =
-                        voiceEntry?.Timestamp ||
-                        voiceEntry?.timestamp ||
-                        null;
+                        const voiceEntry =
+                            src?.voiceEntry ||
+                            sn?.parentVoiceEntry?.parentVoiceEntry ||
+                            sn?.ParentVoiceEntry ||
+                            null;
 
-                    const q =
-                        (timestamp?.RealValue ?? timestamp?.realValue ?? 0) * 4;
+                        if(
+                            !src ||
+                            src.isRestFlag ||
+                            sn.IsGraceNote ||
+                            voiceEntry?.isGrace
+                        ){
+                            return;
+                        }
 
-                    const midi = Math.round(
-                        (src.halfTone ?? sn.halfTone ?? 0) + 12
-                    );
+                        const timestamp =
+                            voiceEntry?.Timestamp ||
+                            voiceEntry?.timestamp ||
+                            null;
 
-                    const voice = osmdVoiceNumber(sn);
+                        const q =
+                            (timestamp?.RealValue ?? timestamp?.realValue ?? 0) * 4;
 
-                    const note = modelNotes.find(n =>
-                        !used.has(n) &&
-                        !n.rest &&
-                        noteVoice(n) === voice &&
-                        Math.abs((n.startQ || 0) - q) < 0.02 &&
-                        noteMidi(n) === midi
-                    );
+                        const midi = Math.round(
+                            (src.halfTone ?? sn.halfTone ?? 0) + 12
+                        );
 
-                    if(!note) return;
+                        const voice = osmdVoiceNumber(sn);
 
-                    used.add(note);
+                        const note = modelNotes.find(n =>
+                            !used.has(n) &&
+                            !n.rest &&
+                            noteVoice(n) === voice &&
+                            Math.abs((n.startQ || 0) - q) < 0.02 &&
+                            noteMidi(n) === midi
+                        );
 
-                    const ap = sn.PositionAndShape?.AbsolutePosition;
+                        if(!note) return;
 
-                    if(!ap) return;
+                        used.add(note);
 
-                    const pt = osmdPointToContainer(
-                        osmdInstance,
-                        container,
-                        ap.x * 10,
-                        ap.y * 10
-                    );
+                        const ap = sn.PositionAndShape?.AbsolutePosition;
 
-                    if(!pt) return;
+                        if(!ap) return;
 
-                    const handle = document.createElement("div");
+                        const pt = osmdPointToContainer(
+                            osmdInstance,
+                            container,
+                            ap.x * 10,
+                            ap.y * 10
+                        );
 
-                    handle.className =
-                        "note-handle" +
-                        (note.id === selectedNoteId ? " selected" : "");
+                        if(!pt) return;
 
-                    handle.style.left = pt.x + "px";
-                    handle.style.top = pt.y + "px";
+                        const handle = document.createElement("div");
 
-                    handle.dataset.noteId = String(note.id);
-                    handle.dataset.mi = String(mi);
-                    handle.dataset.voice = String(noteVoice(note));
-                    handle.title =
-                        `声部 ${noteVoice(note)} · ${pitchLabel(note)} · ` +
-                        `第 ${formatQ(note.startQ)} 拍` +
-                        "（选择移动模式下上下拖动可改变音高）";
+                        handle.className =
+                            "note-handle" +
+                            (note.id === selectedNoteId ? " selected" : "");
 
-                    attachPitchDrag(handle, note, mi, pt);
+                        handle.style.left = pt.x + "px";
+                        handle.style.top = pt.y + "px";
 
-                    layer.appendChild(handle);
+                        handle.dataset.noteId = String(note.id);
+                        handle.dataset.mi = String(mi);
+                        handle.dataset.voice = String(noteVoice(note));
+                        handle.dataset.part = slot.partId;
+                        handle.dataset.staff = String(slot.staffIndex);
+                        handle.title =
+                            `${partById(slot.partId)?.name || ""} · ` +
+                            `${staffLabel(slot.partId, slot.staffIndex)} · ` +
+                            `声部 ${noteVoice(note)} · ${pitchLabel(note)} · ` +
+                            `第 ${formatQ(note.startQ)} 拍` +
+                            "（选择移动模式下上下拖动可改变音高）";
 
-                    noteHandles.push({
-                        note,
-                        mi,
-                        el:handle,
-                        cx:pt.x,
-                        cy:pt.y
+                        const geom = staffGeoms[mi]?.[staffSlot] || null;
+
+                        attachPitchDrag(handle, note, mi, pt, geom);
+
+                        layer.appendChild(handle);
+
+                        noteHandles.push({
+                            note,
+                            mi,
+                            el:handle,
+                            cx:pt.x,
+                            cy:pt.y,
+                            geom
+                        });
                     });
                 });
             });
@@ -4135,11 +5010,25 @@ function onLayerPointerMove(ev){
 
     const rest = restToggle.checked;
     const q = qAtX(geom, point.x);
-    const pitch = rest ? null : pitchAtStaffStep(staffStepAtY(geom, point.y));
+    const partId = geom.partId || activePartId();
+    const staffIndex = geom.staffIndex ?? activeStaffIndex();
+    const pitch = rest ? null : pitchAtStaffStep(
+        staffStepAtY(geom, point.y),
+        geom.bottomDiatonic
+    );
     const midi = pitch ? diatonicToMidi(pitch.d, pitch.alter) : 60;
-    const info = placementAt(geom.mi, q, currentDurQ(), midi, rest, currentVoice());
+    const info = placementAt(
+        geom.mi,
+        q,
+        currentDurQ(),
+        midi,
+        rest,
+        currentVoice(),
+        partId,
+        staffIndex
+    );
 
-    hoverPoint = { geom, q, pitch, info };
+    hoverPoint = { geom, q, pitch, info, partId, staffIndex };
 
     paintAddGhost(geom, q, pitch, info, rest);
 }
@@ -4162,21 +5051,29 @@ function handleAddClick(ev){
 
     const rest = restToggle.checked;
     const q = qAtX(geom, point.x);
-    const pitch = rest ? null : pitchAtStaffStep(staffStepAtY(geom, point.y));
+    const pitch = rest ? null : pitchAtStaffStep(
+        staffStepAtY(geom, point.y),
+        geom.bottomDiatonic
+    );
 
     const result = addNoteAt(
         geom.mi,
         q,
         pitch,
         currentDurQ(),
-        { rest, voice:currentVoice() }
+        {
+            rest,
+            voice:currentVoice(),
+            part:geom.partId || activePartId(),
+            staff:geom.staffIndex ?? activeStaffIndex()
+        }
     );
 
     if(result.error) notify(result.error, true);
 }
 
 /* 选择移动模式：上下拖动改变音高（半音） */
-function attachPitchDrag(handle, note, mi, center){
+function attachPitchDrag(handle, note, mi, center, dragGeom = null){
 
     handle.addEventListener("pointerdown", ev => {
 
@@ -4187,7 +5084,18 @@ function attachPitchDrag(handle, note, mi, center){
 
         selectedNoteId = note.id;
 
+        /* 点选其他乐器 / 谱表上的音符时，左侧面板和后续落音目标跟着切换 */
+        if(
+            notePartId(note) !== selectedPartId ||
+            noteStaffIndex(note) !== activeStaffIndex()
+        ){
+            selectedPartId = notePartId(note);
+            selectedStaff = noteStaffIndex(note);
+            syncPartUI();
+        }
+
         refreshNoteList();
+        refreshMeter();
         syncSelectionClasses();
         syncDurationFromSelection();
 
@@ -4208,7 +5116,7 @@ function attachPitchDrag(handle, note, mi, center){
         const baseD =
             note.octave * 7 + DIATONIC_STEPS.indexOf(note.step);
 
-        const geom = measureGeoms[mi];
+        const geom = dragGeom || measureGeoms[mi];
         const before = snapshotState();
 
         let delta = 0;
@@ -4345,6 +5253,7 @@ function attachPitchDrag(handle, note, mi, center){
                 n !== note &&
                 !n.rest &&
                 noteVoice(n) === noteVoice(note) &&
+                sameNoteContext(n, notePartId(note), noteStaffIndex(note)) &&
                 sameStart(n, note) &&
                 noteMidi(n) === newMidi
             );
@@ -4496,8 +5405,11 @@ function resetBuilder(confirmFirst=true){
 
     state = createBlankState();
     selectedMeasure = 0;
+    selectedPartId = state.parts[0].id;
+    selectedStaff = 0;
     selectedNoteId = null;
     nextNoteId = 1;
+    nextPartId = 2;
     undoStack = [];
     redoStack = [];
     hideAddGhost();
@@ -4551,6 +5463,77 @@ function saveScore(){
 addModeBtn.addEventListener("click", () => setEditMode("add"));
 
 selectModeBtn.addEventListener("click", () => setEditMode("select"));
+
+partSelect.addEventListener("change", () => {
+    setActiveContext(partSelect.value, 0);
+});
+
+staffSelect.addEventListener("change", () => {
+    setActiveContext(activePartId(), parseInt(staffSelect.value, 10) || 0);
+});
+
+partNameInput.addEventListener("change", () => {
+
+    const part = activePart();
+
+    if(!part) return;
+
+    const name = partNameInput.value.trim() || `乐器 ${state.parts.indexOf(part) + 1}`;
+
+    if(name === part.name) return;
+
+    const before = snapshotState();
+
+    part.name = name;
+
+    commitHistory(before);
+    syncPartUI();
+    refreshAll();
+});
+
+instrumentSelect.addEventListener("change", () => {
+
+    const part = activePart();
+
+    if(!part) return;
+
+    const program = parseInt(instrumentSelect.value, 10) || 1;
+
+    if(program === part.program) return;
+
+    const before = snapshotState();
+
+    /* 只自动更新“乐器 2”这类占位名称，用户自定义的名称保持不变 */
+    const autoName =
+        /^乐器\s*\d+$/.test(part.name) ||
+        part.name === instrumentName(part.program);
+
+    part.program = program;
+
+    if(autoName) part.name = instrumentName(program);
+
+    commitHistory(before);
+    syncPartUI();
+    refreshAll();
+
+    notify(`${part.name} 的音色已改为 ${instrumentName(program)}。`);
+});
+
+staffCountSelect.addEventListener("change", () => {
+    setPartStaffCount(parseInt(staffCountSelect.value, 10) || 1);
+});
+
+clefSelect0.addEventListener("change", () => {
+    changePartClef(0, clefSelect0.value);
+});
+
+clefSelect1.addEventListener("change", () => {
+    changePartClef(1, clefSelect1.value);
+});
+
+addPartBtn.addEventListener("click", addPart);
+
+removePartBtn.addEventListener("click", removeActivePart);
 
 /* 工具栏：点音符 / 休止符图标，直接切换到对应形状的落音状态 */
 function chooseNoteTool(durQ, rest){
@@ -4758,7 +5741,11 @@ chordToggle.addEventListener("change", () => {
     refreshGhostFromHover();
 });
 
-voiceSelect.addEventListener("change", refreshGhostFromHover);
+voiceSelect.addEventListener("change", () => {
+    refreshMeter();
+    refreshToolbar();
+    refreshGhostFromHover();
+});
 
 durationSelect.addEventListener("change", () => {
 
@@ -4875,7 +5862,11 @@ initFeatureNav("new.html");
 populateKeySelect();
 populatePitchSelect();
 populateDurationSelect();
+populateInstrumentSelect();
+populateClefSelect(clefSelect0);
+populateClefSelect(clefSelect1);
 populateToolIcons();
+recomputeNextPartId();
 
 titleInput.value = state.title;
 composerInput.value = state.composer;
@@ -4923,7 +5914,14 @@ if(new URLSearchParams(location.search).has("debug")){
         get redoDepth(){ return redoStack.length; },
         get noteHandles(){ return noteHandles.length; },
         get measureGeoms(){ return measureGeoms.length; },
-        get geometry(){ return measureGeoms.map(g => ({ ...g })); },
+        get geometry(){ return measureGeoms.map(g => g ? { ...g } : null); },
+        get staffGeometry(){
+            return staffGeoms.map(row =>
+                (row || []).map(geom => geom ? { ...geom } : null)
+            );
+        },
+        get selectedPartId(){ return selectedPartId; },
+        get selectedStaff(){ return selectedStaff; },
         get osmd(){ return osmdInstance; },
         setEditMode,
         undoScore,
